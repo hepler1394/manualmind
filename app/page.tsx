@@ -21,15 +21,15 @@ const EXAMPLES = [
   'Set up an Anova sous vide for the first time',
 ];
 
-// Pull the leading ```meta { ... } ``` block out of the model stream.
+// Pull the leading meta fenced block out of the model stream.
 function splitMeta(raw: string): { meta: Meta | null; body: string; metaClosed: boolean } {
-  const start = raw.indexOf('```meta');
+  const fence = '```meta';
+  const start = raw.indexOf(fence);
   if (start < 0) {
-    // No meta fence yet. If the text doesn't start with a fence, show it as-is.
     const looksLikeFenceComing = raw.trimStart().startsWith('`');
     return { meta: null, body: looksLikeFenceComing ? '' : raw, metaClosed: false };
   }
-  const afterTag = start + '```meta'.length;
+  const afterTag = start + fence.length;
   const end = raw.indexOf('```', afterTag);
   if (end < 0) return { meta: null, body: '', metaClosed: false };
   const jsonStr = raw.slice(afterTag, end).trim();
@@ -157,8 +157,7 @@ export default function Home() {
   }
 
   const bannerClass = meta && meta.type ? meta.type : 'synthesized';
-  const bannerIcon =
-    meta?.type === 'official' ? '✅' : meta?.type === 'community' ? '💬' : '✨';
+  const bannerIcon = meta?.type === 'official' ? '✅' : meta?.type === 'community' ? '💬' : '✨';
   const bannerTitle =
     meta?.type === 'official'
       ? 'Official manual found'
@@ -167,9 +166,133 @@ export default function Home() {
       : 'Manual synthesized for you';
 
   return (
-    <div className=\"wrap\">
-      <div className=\"brand\">
-        <div className=\"logo\">📘</div>
+    <div className="wrap">
+      <div className="brand">
+        <div className="logo">📘</div>
         <h1>ManualMind</h1>
       </div>
-      <p className=\"tagline\">\n        A manual for <em>anything</em>. Type it, or snap a photo — ManualMind finds the official guide,\n        or builds one in real time from Reddit and the web.\n      </p>\n\n      <div className=\"panel\">\n        <div className=\"searchrow\">\n          <input\n            type=\"text\"\n            placeholder=\"What do you need a manual for?\"\n            value={query}\n            onChange={(e) => setQuery(e.target.value)}\n            onKeyDown={(e) => { if (e.key === 'Enter' && !running) run(); }}\n          />\n          <button className=\"go\" disabled={running || (!query.trim() && !image)} onClick={() => run()}>\n            {running ? 'Working…' : 'Get manual'}\n          </button>\n        </div>\n        <div className=\"tools\">\n          <label className=\"upload\">\n            📷 Upload a photo\n            <input ref={fileRef} type=\"file\" accept=\"image/*\" style={{ display: 'none' }} onChange={onFile} />\n          </label>\n          {image && <img className=\"thumb\" src={image} alt=\"upload preview\" />}\n          {image && (\n            <button className=\"clearimg\" onClick={() => { setImage(null); if (fileRef.current) fileRef.current.value = ''; }}>\n              remove\n            </button>\n          )}\n        </div>\n      </div>\n\n      {!raw && !running && !error && (\n        <div className=\"chips\">\n          {EXAMPLES.map((ex) => (\n            <button key={ex} className=\"chip\" onClick={() => run(ex)}>{ex}</button>\n          ))}\n        </div>\n      )}\n\n      {(running || raw || error) && (\n        <div className=\"stages\">\n          {STAGES.map((s) => {\n            const isDone = doneStages.has(s.key);\n            const isActive = active === s.key;\n            return (\n              <span key={s.key} className={'stage' + (isActive ? ' active' : '') + (isDone ? ' done' : '')}>\n                <span className=\"dot\" />\n                {s.label}\n                {s.key === 'reddit' && redditCount !== null ? ' (' + redditCount + ')' : ''}\n              </span>\n            );\n          })}\n        </div>\n      )}\n\n      {identified && (\n        <div className=\"banner community\" style={{ marginTop: 14 }}>\n          <span className=\"ico\">🔍</span>\n          <div><h3>Identified from your photo</h3><p>{identified}</p></div>\n        </div>\n      )}\n\n      {error && <div className=\"err\">{error}</div>}\n\n      {meta && metaClosed && (\n        <div className={'banner ' + bannerClass}>\n          <span className=\"ico\">{bannerIcon}</span>\n          <div>\n            <h3>{bannerTitle}{meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}</h3>\n            {meta.officialManual ? (\n              <p>Official source: <a href={meta.officialManual} target=\"_blank\" rel=\"noreferrer\">{meta.officialManual}</a></p>\n            ) : (\n              <p>No official manual was found online, so ManualMind assembled this from the best available sources.</p>\n            )}\n          </div>\n        </div>\n      )}\n\n      {body && (\n        <div className=\"result\">\n          <div dangerouslySetInnerHTML={{ __html: marked.parse(body) as string }} />\n          {running && <span className=\"cursor\" />}\n        </div>\n      )}\n\n      <div className=\"footer\">ManualMind · finds the real manual first, builds one when it can’t · powered by Claude</div>\n    </div>\n  );\n}\n"}
+      <p className="tagline">
+        A manual for <em>anything</em>. Type it, or snap a photo — ManualMind finds the official
+        guide, or builds one in real time from Reddit and the web.
+      </p>
+
+      <div className="panel">
+        <div className="searchrow">
+          <input
+            type="text"
+            placeholder="What do you need a manual for?"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !running) run();
+            }}
+          />
+          <button className="go" disabled={running || (!query.trim() && !image)} onClick={() => run()}>
+            {running ? 'Working…' : 'Get manual'}
+          </button>
+        </div>
+        <div className="tools">
+          <label className="upload">
+            📷 Upload a photo
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={onFile}
+            />
+          </label>
+          {image && <img className="thumb" src={image} alt="upload preview" />}
+          {image && (
+            <button
+              className="clearimg"
+              onClick={() => {
+                setImage(null);
+                if (fileRef.current) fileRef.current.value = '';
+              }}
+            >
+              remove
+            </button>
+          )}
+        </div>
+      </div>
+
+      {!raw && !running && !error && (
+        <div className="chips">
+          {EXAMPLES.map((ex) => (
+            <button key={ex} className="chip" onClick={() => run(ex)}>
+              {ex}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {(running || raw || error) && (
+        <div className="stages">
+          {STAGES.map((s) => {
+            const isDone = doneStages.has(s.key);
+            const isActive = active === s.key;
+            return (
+              <span
+                key={s.key}
+                className={'stage' + (isActive ? ' active' : '') + (isDone ? ' done' : '')}
+              >
+                <span className="dot" />
+                {s.label}
+                {s.key === 'reddit' && redditCount !== null ? ' (' + redditCount + ')' : ''}
+              </span>
+            );
+          })}
+        </div>
+      )}
+
+      {identified && (
+        <div className="banner community" style={{ marginTop: 14 }}>
+          <span className="ico">🔍</span>
+          <div>
+            <h3>Identified from your photo</h3>
+            <p>{identified}</p>
+          </div>
+        </div>
+      )}
+
+      {error && <div className="err">{error}</div>}
+
+      {meta && metaClosed && (
+        <div className={'banner ' + bannerClass}>
+          <span className="ico">{bannerIcon}</span>
+          <div>
+            <h3>
+              {bannerTitle}
+              {meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}
+            </h3>
+            {meta.officialManual ? (
+              <p>
+                Official source:{' '}
+                <a href={meta.officialManual} target="_blank" rel="noreferrer">
+                  {meta.officialManual}
+                </a>
+              </p>
+            ) : (
+              <p>
+                No official manual was found online, so ManualMind assembled this from the best
+                available sources.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {body && (
+        <div className="result">
+          <div dangerouslySetInnerHTML={{ __html: marked.parse(body) as string }} />
+          {running && <span className="cursor" />}
+        </div>
+      )}
+
+      <div className="footer">
+        ManualMind · finds the real manual first, builds one when it can’t · powered by Claude
+      </div>
+    </div>
+  );
+}
