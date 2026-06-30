@@ -1,11 +1,19 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 
 marked.setOptions({ breaks: true, gfm: true });
 
 type Meta = { product?: string; officialManual?: string; type?: string; confidence?: string };
+type HistoryItem = {
+  id: string;
+  title: string;
+  type: string;
+  body: string;
+  meta: Meta | null;
+  ts: number;
+};
 
 const STAGES = [
   { key: 'identify', label: 'Identifying photo' },
@@ -21,7 +29,8 @@ const EXAMPLES = [
   'Set up an Anova sous vide for the first time',
 ];
 
-// Pull the leading meta fenced block out of the model stream.
+const HISTORY_KEY = 'mm_history_v1';
+
 function splitMeta(raw: string): { meta: Meta | null; body: string; metaClosed: boolean } {
   const fence = '```meta';
   const start = raw.indexOf(fence);
@@ -43,6 +52,20 @@ function splitMeta(raw: string): { meta: Meta | null; body: string; metaClosed: 
   return { meta, body, metaClosed: true };
 }
 
+function encodeShare(meta: Meta | null, body: string): string {
+  const payload = JSON.stringify({ m: meta, b: body });
+  return btoa(unescape(encodeURIComponent(payload)));
+}
+function decodeShare(s: string): { meta: Meta | null; body: string } | null {
+  try {
+    const json = decodeURIComponent(escape(atob(s)));
+    const parsed = JSON.parse(json);
+    return { meta: parsed.m || null, body: parsed.b || '' };
+  } catch {
+    return null;
+  }
+}
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [image, setImage] = useState<string | null>(null);
@@ -53,9 +76,39 @@ export default function Home() {
   const [redditCount, setRedditCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { meta, body, metaClosed } = splitMeta(raw);
+
+  // Load history + any shared manual from the URL on first render.
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(HISTORY_KEY);
+      if (stored) setHistory(JSON.parse(stored));
+    } catch {}
+    if (typeof window !== 'undefined' && window.location.hash.startsWith('#m=')) {
+      const decoded = decodeShare(window.location.hash.slice(3));
+      if (decoded) {
+        const m = decoded.meta;
+        setRaw('```meta\n' + JSON.stringify(m || {}) + '\n```\n\n' + decoded.body);
+        setDoneStages(new Set(['identify', 'reddit', 'searching', 'generate']));
+      }
+    }
+  }, []);
+
+  function flash(msg: string) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
+  }
+
+  function persistHistory(next: HistoryItem[]) {
+    setHistory(next);
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(next.slice(0, 30)));
+    } catch {}
+  }
 
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files && e.target.files[0];
@@ -63,6 +116,58 @@ export default function Home() {
     const reader = new FileReader();
     reader.onload = () => setImage(reader.result as string);
     reader.readAsDataURL(f);
+  }
+
+  function saveCurrentToHistory(finalRaw: string) {
+    const parsed = splitMeta(finalRaw);
+    if (!parsed.body) return;
+    const title =
+      (parsed.meta && parsed.meta.product) ||
+      identified ||
+      query ||
+      'Manual';
+    const item: HistoryItem = {
+      id: Date.now().toString(36),
+      title,
+      type: (parsed.meta && parsed.meta.type) || 'synthesized',
+      body: parsed.body,
+      meta: parsed.meta,
+      ts: Date.now(),
+    };
+    persistHistory([item, ...history].slice(0, 30));
+  }
+
+  function loadFromHistory(item: HistoryItem) {
+    setError(null);
+    setRunning(false);
+    setIdentified(null);
+    setRedditCount(null);
+    setRaw('```meta\n' + JSON.stringify(item.meta || {}) + '\n```\n\n' + item.body);
+    setDoneStages(new Set(['identify', 'reddit', 'searching', 'generate']));
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function deleteFromHistory(id: string) {
+    persistHistory(history.filter((h) => h.id !== id));
+  }
+
+  function copyManual() {
+    if (!body) return;
+    navigator.clipboard.writeText(body).then(() => flash('Manual copied to clipboard'));
+  }
+
+  function shareManual() {
+    if (!body) return;
+    const code = encodeShare(meta, body);
+    const url = window.location.origin + window.location.pathname + '#m=' + code;
+    navigator.clipboard.writeText(url).then(() => flash('Shareable link copied'));
+    try {
+      window.history.replaceState(null, '', '#m=' + code);
+    } catch {}
+  }
+
+  function savePdf() {
+    window.print();
   }
 
   async function run(q?: string) {
@@ -77,6 +182,7 @@ export default function Home() {
     setActive(image ? 'identify' : 'reddit');
     setRunning(true);
 
+    let finalRaw = '';
     try {
       const res = await fetch('/api/manual', {
         method: 'POST',
@@ -135,6 +241,7 @@ export default function Home() {
               setActive('generate');
               break;
             case 'token':
+              finalRaw += evt.text || '';
               setRaw((r) => r + (evt.text || ''));
               break;
             case 'done':
@@ -148,6 +255,7 @@ export default function Home() {
           }
         }
       }
+      if (finalRaw) saveCurrentToHistory(finalRaw);
     } catch (e: any) {
       setError(e && e.message ? e.message : 'Request failed.');
     } finally {
@@ -165,18 +273,20 @@ export default function Home() {
       ? 'Built from community knowledge'
       : 'Manual synthesized for you';
 
+  const showResult = body && metaClosed;
+
   return (
     <div className="wrap">
-      <div className="brand">
+      <div className="brand no-print">
         <div className="logo">📘</div>
         <h1>ManualMind</h1>
       </div>
-      <p className="tagline">
+      <p className="tagline no-print">
         A manual for <em>anything</em>. Type it, or snap a photo — ManualMind finds the official
         guide, or builds one in real time from Reddit and the web.
       </p>
 
-      <div className="panel">
+      <div className="panel no-print">
         <div className="searchrow">
           <input
             type="text"
@@ -218,7 +328,7 @@ export default function Home() {
       </div>
 
       {!raw && !running && !error && (
-        <div className="chips">
+        <div className="chips no-print">
           {EXAMPLES.map((ex) => (
             <button key={ex} className="chip" onClick={() => run(ex)}>
               {ex}
@@ -228,7 +338,7 @@ export default function Home() {
       )}
 
       {(running || raw || error) && (
-        <div className="stages">
+        <div className="stages no-print">
           {STAGES.map((s) => {
             const isDone = doneStages.has(s.key);
             const isActive = active === s.key;
@@ -247,7 +357,7 @@ export default function Home() {
       )}
 
       {identified && (
-        <div className="banner community" style={{ marginTop: 14 }}>
+        <div className="banner community no-print" style={{ marginTop: 14 }}>
           <span className="ico">🔍</span>
           <div>
             <h3>Identified from your photo</h3>
@@ -256,7 +366,7 @@ export default function Home() {
         </div>
       )}
 
-      {error && <div className="err">{error}</div>}
+      {error && <div className="err no-print">{error}</div>}
 
       {meta && metaClosed && (
         <div className={'banner ' + bannerClass}>
@@ -283,6 +393,14 @@ export default function Home() {
         </div>
       )}
 
+      {showResult && !running && (
+        <div className="actions no-print">
+          <button onClick={savePdf}>⬇️ Save as PDF</button>
+          <button onClick={copyManual}>📋 Copy</button>
+          <button onClick={shareManual}>🔗 Share link</button>
+        </div>
+      )}
+
       {body && (
         <div className="result">
           <div dangerouslySetInnerHTML={{ __html: marked.parse(body) as string }} />
@@ -290,9 +408,30 @@ export default function Home() {
         </div>
       )}
 
-      <div className="footer">
+      {history.length > 0 && (
+        <div className="history no-print">
+          <h2>Your manuals</h2>
+          <div className="hlist">
+            {history.map((h) => (
+              <div key={h.id} className="hitem">
+                <button className="hmain" onClick={() => loadFromHistory(h)}>
+                  <span className="htype">{h.type === 'official' ? '✅' : h.type === 'community' ? '💬' : '✨'}</span>
+                  <span className="htitle">{h.title}</span>
+                </button>
+                <button className="hdel" onClick={() => deleteFromHistory(h.id)} aria-label="delete">
+                  ✕
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div className="footer no-print">
         ManualMind · finds the real manual first, builds one when it can’t · powered by Claude
       </div>
+
+      {toast && <div className="toast no-print">{toast}</div>}
     </div>
   );
 }
