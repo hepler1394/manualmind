@@ -8,21 +8,21 @@ Type any product, problem, or task (or upload a photo) and ManualMind runs a tie
 2. **Find first** — it web-searches for the *official* manufacturer manual/PDF. If one exists, you get the real thing, linked.
 3. **Synthesize** — when none exists, it pulls real Reddit threads + web results and builds a clean, step-by-step manual in real time, with sources cited.
 
-Extras: photo upload, streamed output, Save-as-PDF, shareable links, a saved manual **library**, **Spaces** (group manuals by home / property / shop), and per-manual **follow-up chat**. Accounts + billing make it a subscription product.
+Extras: photo upload, streamed output, Save-as-PDF, **quick-start cards** (1-page printable), shareable links, a saved manual **library**, **Spaces** (group by home / property / shop), per-manual **follow-up chat**, and **maintenance reminders** with AI suggestions. Accounts + billing make it a subscription product.
 
 ---
 
 ## Tech
 
 - **Next.js 14** (App Router) on Vercel
-- **Anthropic API** (vision + web search + streamed synthesis and chat)
-- **Supabase** — auth (magic link + Google) and Postgres (library, spaces, chat)
+- **Anthropic API** (vision + web search + streamed synthesis, chat, cards, reminder suggestions)
+- **Supabase** — auth (magic link + Google) and Postgres (library, spaces, chat, reminders)
 - **Stripe** — Pro subscription ($20/mo), customer portal, webhooks
 
 ## Free vs Pro
 
-- **Free:** 5 manuals / month (3 / day signed-out), library, spaces, chat, PDF & share.
-- **Pro ($20/mo):** unlimited manuals.
+- **Free:** 5 manuals / month (3 / day signed-out), library, spaces, chat, reminders, PDF & share.
+- **Pro ($20/mo):** unlimited manuals + quick-start cards.
 
 Limits live in `lib/plan.ts`; enforcement is server-side in `app/api/manual/route.ts`.
 
@@ -35,8 +35,8 @@ Add `ANTHROPIC_API_KEY` (https://console.anthropic.com/).
 
 ### 2. Supabase
 1. Create a project at https://supabase.com.
-2. In the SQL editor, run `supabase/schema.sql` (fresh install — creates everything incl. spaces + chat).
-   - If you already ran the Phase 1 schema, run `supabase/phase2.sql` instead to add spaces + chat.
+2. In the SQL editor, run `supabase/schema.sql` (fresh install — creates everything through Phase 3).
+   - Upgrading an existing DB? Run the migration for what you're missing: `supabase/phase2.sql` (spaces + chat), then `supabase/phase3.sql` (reminders).
 3. Copy Project URL + anon key + service-role key into env vars.
 4. Auth → URL Configuration: add your site URL and `…/auth/callback` as a redirect URL. (Optional) enable Google provider.
 
@@ -48,7 +48,7 @@ Add `ANTHROPIC_API_KEY` (https://console.anthropic.com/).
 ### 4. Site
 Set `NEXT_PUBLIC_SITE_URL` to your deployed URL.
 
-> **Graceful degradation:** with only `ANTHROPIC_API_KEY` set, the app runs as the anonymous, local-library version. Auth, spaces, chat persistence, and billing activate once the Supabase + Stripe env vars are present.
+> **Graceful degradation:** with only `ANTHROPIC_API_KEY` set, the app runs as the anonymous, local-library version. Auth, spaces, chat, reminders, and billing activate once the Supabase + Stripe env vars are present.
 
 ## Local dev
 
@@ -60,6 +60,6 @@ npm run dev
 
 ## Roadmap
 
-Delivered: tiered manual pipeline, photo ID, streaming, PDF/share, accounts + billing (Phase 1), **Spaces + per-manual chat (Phase 2)**.
+Delivered: tiered manual pipeline, photo ID, streaming, PDF/share (Phase 0–1), accounts + billing, Spaces + per-manual chat (Phase 2), **quick-start cards + maintenance reminders (Phase 3)**, PWA install, CI build check.
 
-Next (see `ManualMind-Product-Plan`): quick-start cards, smart photo (model/serial/error-code reading), maintenance reminders, public SEO manual pages, Team plan.
+Next: scheduled email delivery of due reminders (cron + email), smart photo (model/serial/error-code reading), public SEO manual pages, Team plan.
