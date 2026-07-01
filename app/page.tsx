@@ -2,17 +2,19 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
+import { createClient } from '@/lib/supabase/client';
 
 marked.setOptions({ breaks: true, gfm: true });
 
 type Meta = { product?: string; officialManual?: string; type?: string; confidence?: string };
-type HistoryItem = {
-  id: string;
-  title: string;
-  type: string;
-  body: string;
-  meta: Meta | null;
-  ts: number;
+type LibItem = { id: string; title: string; type: string; body: string; meta: Meta | null };
+type Me = {
+  signedIn: boolean;
+  email?: string;
+  plan?: string;
+  usedThisMonth?: number;
+  limit?: number | null;
+  manuals?: any[];
 };
 
 const STAGES = [
@@ -30,6 +32,8 @@ const EXAMPLES = [
 ];
 
 const HISTORY_KEY = 'mm_history_v1';
+const hasAuth =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 function splitMeta(raw: string): { meta: Meta | null; body: string; metaClosed: boolean } {
   const fence = '```meta';
@@ -41,25 +45,21 @@ function splitMeta(raw: string): { meta: Meta | null; body: string; metaClosed: 
   const afterTag = start + fence.length;
   const end = raw.indexOf('```', afterTag);
   if (end < 0) return { meta: null, body: '', metaClosed: false };
-  const jsonStr = raw.slice(afterTag, end).trim();
   let meta: Meta | null = null;
   try {
-    meta = JSON.parse(jsonStr);
+    meta = JSON.parse(raw.slice(afterTag, end).trim());
   } catch {
     meta = null;
   }
-  const body = raw.slice(end + 3).replace(/^\s+/, '');
-  return { meta, body, metaClosed: true };
+  return { meta, body: raw.slice(end + 3).replace(/^\s+/, ''), metaClosed: true };
 }
 
 function encodeShare(meta: Meta | null, body: string): string {
-  const payload = JSON.stringify({ m: meta, b: body });
-  return btoa(unescape(encodeURIComponent(payload)));
+  return btoa(unescape(encodeURIComponent(JSON.stringify({ m: meta, b: body }))));
 }
 function decodeShare(s: string): { meta: Meta | null; body: string } | null {
   try {
-    const json = decodeURIComponent(escape(atob(s)));
-    const parsed = JSON.parse(json);
+    const parsed = JSON.parse(decodeURIComponent(escape(atob(s))));
     return { meta: parsed.m || null, body: parsed.b || '' };
   } catch {
     return null;
@@ -75,14 +75,25 @@ export default function Home() {
   const [identified, setIdentified] = useState<string | null>(null);
   const [redditCount, setRedditCount] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [limitHit, setLimitHit] = useState(false);
   const [running, setRunning] = useState(false);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [history, setHistory] = useState<LibItem[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  const [me, setMe] = useState<Me>({ signedIn: false });
   const fileRef = useRef<HTMLInputElement>(null);
+  const [supabase] = useState(() => (hasAuth ? createClient() : null));
 
   const { meta, body, metaClosed } = splitMeta(raw);
 
-  // Load history + any shared manual from the URL on first render.
+  async function loadMe() {
+    if (!hasAuth) return;
+    try {
+      const res = await fetch('/api/me');
+      const data = await res.json();
+      setMe(data);
+    } catch {}
+  }
+
   useEffect(() => {
     try {
       const stored = localStorage.getItem(HISTORY_KEY);
@@ -91,19 +102,33 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.location.hash.startsWith('#m=')) {
       const decoded = decodeShare(window.location.hash.slice(3));
       if (decoded) {
-        const m = decoded.meta;
-        setRaw('```meta\n' + JSON.stringify(m || {}) + '\n```\n\n' + decoded.body);
+        setRaw('```meta\n' + JSON.stringify(decoded.meta || {}) + '\n```\n\n' + decoded.body);
         setDoneStages(new Set(['identify', 'reddit', 'searching', 'generate']));
       }
     }
+    loadMe();
+    if (typeof window !== 'undefined' && window.location.search.includes('upgraded=1')) {
+      flash('Welcome to Pro! Unlimited manuals unlocked.');
+      window.history.replaceState(null, '', '/');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function flash(msg: string) {
     setToast(msg);
-    setTimeout(() => setToast(null), 2200);
+    setTimeout(() => setToast(null), 2600);
   }
 
-  function persistHistory(next: HistoryItem[]) {
+  const dbManuals: LibItem[] = (me.manuals || []).map((m: any) => ({
+    id: m.id,
+    title: m.title,
+    type: m.type || 'synthesized',
+    body: m.body,
+    meta: m.meta || (m.official_manual ? { officialManual: m.official_manual, type: m.type } : null),
+  }));
+  const library: LibItem[] = me.signedIn ? dbManuals : history;
+
+  function persistLocal(next: LibItem[]) {
     setHistory(next);
     try {
       localStorage.setItem(HISTORY_KEY, JSON.stringify(next.slice(0, 30)));
@@ -118,27 +143,22 @@ export default function Home() {
     reader.readAsDataURL(f);
   }
 
-  function saveCurrentToHistory(finalRaw: string) {
+  function saveLocal(finalRaw: string) {
     const parsed = splitMeta(finalRaw);
     if (!parsed.body) return;
-    const title =
-      (parsed.meta && parsed.meta.product) ||
-      identified ||
-      query ||
-      'Manual';
-    const item: HistoryItem = {
+    const item: LibItem = {
       id: Date.now().toString(36),
-      title,
+      title: (parsed.meta && parsed.meta.product) || identified || query || 'Manual',
       type: (parsed.meta && parsed.meta.type) || 'synthesized',
       body: parsed.body,
       meta: parsed.meta,
-      ts: Date.now(),
     };
-    persistHistory([item, ...history].slice(0, 30));
+    persistLocal([item, ...history].slice(0, 30));
   }
 
-  function loadFromHistory(item: HistoryItem) {
+  function loadItem(item: LibItem) {
     setError(null);
+    setLimitHit(false);
     setRunning(false);
     setIdentified(null);
     setRedditCount(null);
@@ -147,15 +167,19 @@ export default function Home() {
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  function deleteFromHistory(id: string) {
-    persistHistory(history.filter((h) => h.id !== id));
+  async function deleteItem(item: LibItem) {
+    if (me.signedIn) {
+      await fetch('/api/manuals?id=' + encodeURIComponent(item.id), { method: 'DELETE' });
+      loadMe();
+    } else {
+      persistLocal(history.filter((h) => h.id !== item.id));
+    }
   }
 
   function copyManual() {
     if (!body) return;
     navigator.clipboard.writeText(body).then(() => flash('Manual copied to clipboard'));
   }
-
   function shareManual() {
     if (!body) return;
     const code = encodeShare(meta, body);
@@ -165,9 +189,34 @@ export default function Home() {
       window.history.replaceState(null, '', '#m=' + code);
     } catch {}
   }
-
   function savePdf() {
     window.print();
+  }
+
+  async function upgrade() {
+    try {
+      const res = await fetch('/api/stripe/checkout', { method: 'POST' });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else flash(data.error || 'Could not start checkout.');
+    } catch {
+      flash('Could not start checkout.');
+    }
+  }
+  async function manageBilling() {
+    try {
+      const res = await fetch('/api/stripe/portal', { method: 'POST' });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+      else flash(data.error || 'Could not open billing.');
+    } catch {
+      flash('Could not open billing.');
+    }
+  }
+  async function signOut() {
+    if (supabase) await supabase.auth.signOut();
+    setMe({ signedIn: false });
+    flash('Signed out');
   }
 
   async function run(q?: string) {
@@ -176,6 +225,7 @@ export default function Home() {
     if (q !== undefined) setQuery(q);
     setRaw('');
     setError(null);
+    setLimitHit(false);
     setIdentified(null);
     setRedditCount(null);
     setDoneStages(new Set());
@@ -193,7 +243,6 @@ export default function Home() {
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = '';
-
       const markDone = (k: string) =>
         setDoneStages((prev) => {
           const n = new Set(prev);
@@ -217,45 +266,30 @@ export default function Home() {
             continue;
           }
           switch (evt.stage) {
-            case 'identify':
-              setActive('identify');
-              break;
+            case 'identify': setActive('identify'); break;
             case 'identified':
-              setIdentified(evt.product);
-              markDone('identify');
-              setActive('reddit');
-              break;
-            case 'reddit':
-              setActive('reddit');
-              break;
+              setIdentified(evt.product); markDone('identify'); setActive('reddit'); break;
+            case 'reddit': setActive('reddit'); break;
             case 'reddit_done':
-              setRedditCount(evt.count);
-              markDone('reddit');
-              setActive('searching');
-              break;
-            case 'searching':
-              setActive('searching');
-              break;
-            case 'generate':
-              markDone('searching');
-              setActive('generate');
-              break;
+              setRedditCount(evt.count); markDone('reddit'); setActive('searching'); break;
+            case 'searching': setActive('searching'); break;
+            case 'generate': markDone('searching'); setActive('generate'); break;
             case 'token':
               finalRaw += evt.text || '';
               setRaw((r) => r + (evt.text || ''));
               break;
-            case 'done':
-              markDone('generate');
-              setActive(null);
-              break;
+            case 'done': markDone('generate'); setActive(null); break;
+            case 'limit':
+              setError(evt.message); setLimitHit(true); setActive(null); break;
             case 'error':
-              setError(evt.message || 'Something went wrong.');
-              setActive(null);
-              break;
+              setError(evt.message || 'Something went wrong.'); setActive(null); break;
           }
         }
       }
-      if (finalRaw) saveCurrentToHistory(finalRaw);
+      if (finalRaw) {
+        if (me.signedIn) loadMe();
+        else saveLocal(finalRaw);
+      }
     } catch (e: any) {
       setError(e && e.message ? e.message : 'Request failed.');
     } finally {
@@ -267,16 +301,36 @@ export default function Home() {
   const bannerClass = meta && meta.type ? meta.type : 'synthesized';
   const bannerIcon = meta?.type === 'official' ? '✅' : meta?.type === 'community' ? '💬' : '✨';
   const bannerTitle =
-    meta?.type === 'official'
-      ? 'Official manual found'
-      : meta?.type === 'community'
-      ? 'Built from community knowledge'
+    meta?.type === 'official' ? 'Official manual found'
+      : meta?.type === 'community' ? 'Built from community knowledge'
       : 'Manual synthesized for you';
-
   const showResult = body && metaClosed;
+  const isPro = me.plan === 'pro';
 
   return (
     <div className="wrap">
+      {hasAuth && (
+        <div className="topbar no-print">
+          {me.signedIn ? (
+            <>
+              <span className={'plan ' + (isPro ? 'pro' : '')}>{isPro ? 'PRO' : 'FREE'}</span>
+              {!isPro && me.limit != null && (
+                <span className="usage">{(me.usedThisMonth || 0)} / {me.limit} this month</span>
+              )}
+              <span className="email">{me.email}</span>
+              {isPro ? (
+                <button className="tb" onClick={manageBilling}>Manage</button>
+              ) : (
+                <button className="tb up" onClick={upgrade}>Upgrade $20/mo</button>
+              )}
+              <button className="tb" onClick={signOut}>Sign out</button>
+            </>
+          ) : (
+            <a className="tb" href="/login">Sign in</a>
+          )}
+        </div>
+      )}
+
       <div className="brand no-print">
         <div className="logo">📘</div>
         <h1>ManualMind</h1>
@@ -293,9 +347,7 @@ export default function Home() {
             placeholder="What do you need a manual for?"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !running) run();
-            }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !running) run(); }}
           />
           <button className="go" disabled={running || (!query.trim() && !image)} onClick={() => run()}>
             {running ? 'Working…' : 'Get manual'}
@@ -304,23 +356,11 @@ export default function Home() {
         <div className="tools">
           <label className="upload">
             📷 Upload a photo
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={onFile}
-            />
+            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFile} />
           </label>
           {image && <img className="thumb" src={image} alt="upload preview" />}
           {image && (
-            <button
-              className="clearimg"
-              onClick={() => {
-                setImage(null);
-                if (fileRef.current) fileRef.current.value = '';
-              }}
-            >
+            <button className="clearimg" onClick={() => { setImage(null); if (fileRef.current) fileRef.current.value = ''; }}>
               remove
             </button>
           )}
@@ -330,9 +370,7 @@ export default function Home() {
       {!raw && !running && !error && (
         <div className="chips no-print">
           {EXAMPLES.map((ex) => (
-            <button key={ex} className="chip" onClick={() => run(ex)}>
-              {ex}
-            </button>
+            <button key={ex} className="chip" onClick={() => run(ex)}>{ex}</button>
           ))}
         </div>
       )}
@@ -343,10 +381,7 @@ export default function Home() {
             const isDone = doneStages.has(s.key);
             const isActive = active === s.key;
             return (
-              <span
-                key={s.key}
-                className={'stage' + (isActive ? ' active' : '') + (isDone ? ' done' : '')}
-              >
+              <span key={s.key} className={'stage' + (isActive ? ' active' : '') + (isDone ? ' done' : '')}>
                 <span className="dot" />
                 {s.label}
                 {s.key === 'reddit' && redditCount !== null ? ' (' + redditCount + ')' : ''}
@@ -359,35 +394,37 @@ export default function Home() {
       {identified && (
         <div className="banner community no-print" style={{ marginTop: 14 }}>
           <span className="ico">🔍</span>
-          <div>
-            <h3>Identified from your photo</h3>
-            <p>{identified}</p>
-          </div>
+          <div><h3>Identified from your photo</h3><p>{identified}</p></div>
         </div>
       )}
 
-      {error && <div className="err no-print">{error}</div>}
+      {error && (
+        <div className="err no-print">
+          <div>{error}</div>
+          {limitHit && (
+            <div className="limitcta">
+              {me.signedIn ? (
+                <button className="tb up" onClick={upgrade}>Upgrade to Pro — $20/mo</button>
+              ) : (
+                <>
+                  <a className="tb" href="/login">Sign in (free)</a>
+                  {hasAuth && <button className="tb up" onClick={upgrade}>Get Pro</button>}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {meta && metaClosed && (
         <div className={'banner ' + bannerClass}>
           <span className="ico">{bannerIcon}</span>
           <div>
-            <h3>
-              {bannerTitle}
-              {meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}
-            </h3>
+            <h3>{bannerTitle}{meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}</h3>
             {meta.officialManual ? (
-              <p>
-                Official source:{' '}
-                <a href={meta.officialManual} target="_blank" rel="noreferrer">
-                  {meta.officialManual}
-                </a>
-              </p>
+              <p>Official source: <a href={meta.officialManual} target="_blank" rel="noreferrer">{meta.officialManual}</a></p>
             ) : (
-              <p>
-                No official manual was found online, so ManualMind assembled this from the best
-                available sources.
-              </p>
+              <p>No official manual was found online, so ManualMind assembled this from the best available sources.</p>
             )}
           </div>
         </div>
@@ -408,19 +445,22 @@ export default function Home() {
         </div>
       )}
 
-      {history.length > 0 && (
+      {library.length > 0 && (
         <div className="history no-print">
-          <h2>Your manuals</h2>
+          <h2>{me.signedIn ? 'Your library' : 'Recent (saved on this device)'}</h2>
+          {!me.signedIn && hasAuth && (
+            <p className="hnote">
+              <a href="/login">Sign in</a> to save your library to the cloud and sync across devices.
+            </p>
+          )}
           <div className="hlist">
-            {history.map((h) => (
+            {library.map((h) => (
               <div key={h.id} className="hitem">
-                <button className="hmain" onClick={() => loadFromHistory(h)}>
+                <button className="hmain" onClick={() => loadItem(h)}>
                   <span className="htype">{h.type === 'official' ? '✅' : h.type === 'community' ? '💬' : '✨'}</span>
                   <span className="htitle">{h.title}</span>
                 </button>
-                <button className="hdel" onClick={() => deleteFromHistory(h.id)} aria-label="delete">
-                  ✕
-                </button>
+                <button className="hdel" onClick={() => deleteItem(h)} aria-label="delete">✕</button>
               </div>
             ))}
           </div>
