@@ -51,6 +51,11 @@ export async function GET() {
       .select('id, name, created_at')
       .order('created_at', { ascending: true });
 
+    const { data: reminders } = await supabase
+      .from('reminders')
+      .select('id, manual_id, label, interval_days, next_due')
+      .order('next_due', { ascending: true });
+
     return NextResponse.json({
       signedIn: true,
       email: user.email,
@@ -59,6 +64,7 @@ export async function GET() {
       limit: isPro(plan) ? null : FREE_MONTHLY_MANUALS,
       manuals: manuals || [],
       spaces: spaces || [],
+      reminders: reminders || [],
     });
   } catch {
     return NextResponse.json({ signedIn: false });

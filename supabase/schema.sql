@@ -1,4 +1,4 @@
--- ManualMind schema (Phase 1 + Phase 2). Run once in the Supabase SQL editor.
+-- ManualMind schema (Phase 1 + 2 + 3). Run once in the Supabase SQL editor.
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -41,6 +41,18 @@ create table if not exists public.manual_chats (
 );
 create index if not exists chats_manual_idx on public.manual_chats(manual_id, created_at);
 
+create table if not exists public.reminders (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  manual_id uuid references public.manuals(id) on delete cascade,
+  label text not null,
+  interval_days int not null default 90,
+  next_due date not null default (current_date + 90),
+  created_at timestamptz default now()
+);
+create index if not exists reminders_user_idx on public.reminders(user_id, next_due);
+create index if not exists reminders_manual_idx on public.reminders(manual_id);
+
 create table if not exists public.usage (
   id bigint generated always as identity primary key,
   user_id uuid references auth.users(id) on delete cascade,
@@ -55,6 +67,7 @@ alter table public.profiles enable row level security;
 alter table public.spaces enable row level security;
 alter table public.manuals enable row level security;
 alter table public.manual_chats enable row level security;
+alter table public.reminders enable row level security;
 alter table public.usage enable row level security;
 
 drop policy if exists "own profile select" on public.profiles;
@@ -72,6 +85,10 @@ create policy "own manuals" on public.manuals for all
 
 drop policy if exists "own chats" on public.manual_chats;
 create policy "own chats" on public.manual_chats for all
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "own reminders" on public.reminders;
+create policy "own reminders" on public.reminders for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
 -- usage is written only by the service role (bypasses RLS); no public policies.
