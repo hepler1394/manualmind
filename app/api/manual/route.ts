@@ -118,6 +118,7 @@ export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const query: string = (body.query || '').toString().trim();
   const image: string | undefined = body.image;
+  const spaceId: string | null = body.spaceId || null;
 
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
 
@@ -277,14 +278,20 @@ export async function POST(req: Request) {
             await admin.from('usage').insert({ user_id: user ? user.id : null, ip, kind: 'manual' });
             if (user && full) {
               const { meta, body: manualBody } = splitMeta(full);
-              await admin.from('manuals').insert({
-                user_id: user.id,
-                title: (meta && meta.product) || subject || 'Manual',
-                type: (meta && meta.type) || 'synthesized',
-                body: manualBody || full,
-                meta: meta || null,
-                official_manual: (meta && meta.officialManual) || null,
-              });
+              const { data: inserted } = await admin
+                .from('manuals')
+                .insert({
+                  user_id: user.id,
+                  space_id: spaceId,
+                  title: (meta && meta.product) || subject || 'Manual',
+                  type: (meta && meta.type) || 'synthesized',
+                  body: manualBody || full,
+                  meta: meta || null,
+                  official_manual: (meta && meta.officialManual) || null,
+                })
+                .select('id')
+                .single();
+              if (inserted && inserted.id) send({ stage: 'saved', id: inserted.id });
             }
           } catch {
             // non-fatal: still return the manual to the user
