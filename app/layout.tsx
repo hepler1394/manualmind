@@ -1,10 +1,21 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
   title: 'ManualMind — a manual for anything',
   description:
     'AI that finds the official manual for anything, or builds one in real time from Reddit and the web. Upload a photo or just type.',
+  manifest: '/manifest.webmanifest',
+  applicationName: 'ManualMind',
+  appleWebApp: { capable: true, title: 'ManualMind', statusBarStyle: 'black-translucent' },
+  icons: { icon: '/icon.svg', apple: '/icon.svg', shortcut: '/icon.svg' },
+};
+
+export const viewport: Viewport = {
+  themeColor: '#0b0d12',
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
