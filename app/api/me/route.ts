@@ -42,9 +42,14 @@ export async function GET() {
 
     const { data: manuals } = await supabase
       .from('manuals')
-      .select('id, title, type, body, meta, official_manual, created_at')
+      .select('id, title, type, body, meta, official_manual, space_id, created_at')
       .order('created_at', { ascending: false })
-      .limit(100);
+      .limit(200);
+
+    const { data: spaces } = await supabase
+      .from('spaces')
+      .select('id, name, created_at')
+      .order('created_at', { ascending: true });
 
     return NextResponse.json({
       signedIn: true,
@@ -53,6 +58,7 @@ export async function GET() {
       usedThisMonth: count || 0,
       limit: isPro(plan) ? null : FREE_MONTHLY_MANUALS,
       manuals: manuals || [],
+      spaces: spaces || [],
     });
   } catch {
     return NextResponse.json({ signedIn: false });

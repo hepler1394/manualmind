@@ -3,10 +3,10 @@ import { createClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 
-export async function PATCH(req: Request) {
+export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
-  const id = body.id;
-  if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+  const name = (body.name || '').toString().trim();
+  if (!name) return NextResponse.json({ error: 'Name required' }, { status: 400 });
 
   const supabase = createClient();
   const {
@@ -14,10 +14,13 @@ export async function PATCH(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
 
-  const space_id = body.space_id === null || body.space_id === '' ? null : body.space_id;
-  const { error } = await supabase.from('manuals').update({ space_id }).eq('id', id);
+  const { data, error } = await supabase
+    .from('spaces')
+    .insert({ user_id: user.id, name: name.slice(0, 60) })
+    .select('id, name')
+    .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ space: data });
 }
 
 export async function DELETE(req: Request) {
@@ -31,7 +34,7 @@ export async function DELETE(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
 
-  const { error } = await supabase.from('manuals').delete().eq('id', id);
+  const { error } = await supabase.from('spaces').delete().eq('id', id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
