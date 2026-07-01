@@ -51,6 +51,11 @@ button.go:disabled { opacity: 0.5; cursor: default; }
 .clearimg { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 13px; }
 .spacesel { background: var(--bg2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 9px 11px; font-size: 13px; cursor: pointer; }
 
+.duebar { margin-top: 24px; border: 1px solid rgba(251,191,36,0.5); background: rgba(251,191,36,0.08); border-radius: 12px; padding: 12px 16px; }
+.duebar h2 { font-size: 14px; margin: 0 0 6px; color: var(--warn); }
+.duebar-item { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 6px 0; font-size: 13.5px; }
+.duebar-item > button:first-child { background: none; border: none; color: var(--accent); cursor: pointer; font: inherit; text-align: left; padding: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; }
+
 .chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 18px; justify-content: center; }
 .chip { background: var(--bg2); border: 1px solid var(--line); color: var(--muted); border-radius: 999px; padding: 9px 13px; font-size: 13px; cursor: pointer; }
 .chip:hover { color: var(--text); border-color: var(--accent); }
@@ -76,6 +81,7 @@ button.go:disabled { opacity: 0.5; cursor: default; }
 .actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
 .actions button { background: var(--bg2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 11px 15px; font-size: 14px; cursor: pointer; min-height: 44px; }
 .actions button:hover { border-color: var(--accent); }
+.actions button:disabled { opacity: 0.5; cursor: default; }
 
 .result { margin-top: 20px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 8px 26px 26px; }
 .result h1, .result h2, .result h3 { letter-spacing: -0.01em; }
@@ -90,6 +96,19 @@ button.go:disabled { opacity: 0.5; cursor: default; }
 .result hr { border: none; border-top: 1px solid var(--line); margin: 22px 0; }
 .result img { max-width: 100%; height: auto; }
 .cursor { display: inline-block; width: 8px; height: 17px; background: var(--accent); margin-left: 2px; vertical-align: text-bottom; animation: pulse 0.9s infinite; }
+
+.reminders { margin-top: 22px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px 20px; }
+.reminders h2 { font-size: 15px; margin: 0 0 10px; color: var(--muted); }
+.rem-item { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.rem-item:last-of-type { border-bottom: none; }
+.rem-label { flex: 1; font-size: 14px; }
+.rem-when { font-size: 12px; color: var(--muted); white-space: nowrap; }
+.rem-badge { font-size: 11px; font-weight: 700; color: #0b0d12; background: var(--warn); border-radius: 6px; padding: 2px 7px; }
+.rem-btn { background: var(--bg2); border: 1px solid var(--line); color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 12.5px; cursor: pointer; }
+.rem-btn:hover { border-color: var(--accent); }
+.rem-add { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+.rem-add input { flex: 1; min-width: 160px; padding: 10px 12px; font-size: 14px; }
+.rem-add select { background: var(--bg2); border: 1px solid var(--line); color: var(--text); border-radius: 10px; padding: 0 10px; font-size: 13px; }
 
 .chat { margin-top: 22px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px 20px; }
 .chat h2 { font-size: 15px; margin: 0 0 12px; color: var(--muted); }
@@ -149,6 +168,7 @@ button.go:disabled { opacity: 0.5; cursor: default; }
   .actions button { flex: 1; }
   .msg { max-width: 95%; }
   .hspace { max-width: 96px; }
+  .rem-add input { min-width: 0; }
 }
 
 @media print {
