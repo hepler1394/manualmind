@@ -8,6 +8,11 @@ export const maxDuration = 60;
 
 const MODEL = 'claude-sonnet-5';
 
+const DB_ENABLED =
+  !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
+  !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+  !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 type RedditPost = { title: string; subreddit: string; score: number; url: string; body: string };
 
 async function fetchReddit(query: string): Promise<RedditPost[]> {
@@ -116,13 +121,17 @@ export async function POST(req: Request) {
 
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
 
-  // Identify the caller (may be anonymous).
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const admin = adminClient();
+  // Identify the caller (only if the DB/auth layer is configured).
+  let user: any = null;
+  const admin = DB_ENABLED ? adminClient() : null;
+  if (DB_ENABLED) {
+    try {
+      const supabase = createClient();
+      user = (await supabase.auth.getUser()).data.user;
+    } catch {
+      user = null;
+    }
+  }
 
   const stream = new ReadableStream({
     async start(controller) {
@@ -145,52 +154,51 @@ export async function POST(req: Request) {
           return;
         }
 
-        // ---- Usage caps ----
-        let plan = 'free';
-        if (user) {
-          const { data: profile } = await admin
-            .from('profiles')
-            .select('plan')
-            .eq('id', user.id)
-            .single();
-          plan = profile?.plan || 'free';
-
-          if (!isPro(plan)) {
+        // ---- Usage caps (only when DB is enabled) ----
+        if (DB_ENABLED && admin) {
+          if (user) {
+            const { data: profile } = await admin
+              .from('profiles')
+              .select('plan')
+              .eq('id', user.id)
+              .single();
+            const plan = profile?.plan || 'free';
+            if (!isPro(plan)) {
+              const { count } = await admin
+                .from('usage')
+                .select('*', { count: 'exact', head: true })
+                .eq('user_id', user.id)
+                .eq('kind', 'manual')
+                .gte('created_at', monthStartISO());
+              if ((count || 0) >= FREE_MONTHLY_MANUALS) {
+                send({
+                  stage: 'limit',
+                  signedIn: true,
+                  message:
+                    'You have used all ' + FREE_MONTHLY_MANUALS +
+                    ' free manuals this month. Upgrade to Pro for unlimited manuals.',
+                });
+                controller.close();
+                return;
+              }
+            }
+          } else {
             const { count } = await admin
               .from('usage')
               .select('*', { count: 'exact', head: true })
-              .eq('user_id', user.id)
-              .eq('kind', 'manual')
-              .gte('created_at', monthStartISO());
-            if ((count || 0) >= FREE_MONTHLY_MANUALS) {
+              .is('user_id', null)
+              .eq('ip', ip)
+              .gte('created_at', dayStartISO());
+            if ((count || 0) >= ANON_DAILY_MANUALS) {
               send({
                 stage: 'limit',
-                signedIn: true,
+                signedIn: false,
                 message:
-                  'You have used all ' +
-                  FREE_MONTHLY_MANUALS +
-                  ' free manuals this month. Upgrade to Pro for unlimited manuals.',
+                  'You have reached the free daily limit. Sign in (free) for more, or upgrade to Pro for unlimited.',
               });
               controller.close();
               return;
             }
-          }
-        } else {
-          const { count } = await admin
-            .from('usage')
-            .select('*', { count: 'exact', head: true })
-            .is('user_id', null)
-            .eq('ip', ip)
-            .gte('created_at', dayStartISO());
-          if ((count || 0) >= ANON_DAILY_MANUALS) {
-            send({
-              stage: 'limit',
-              signedIn: false,
-              message:
-                'You have reached the free daily limit. Sign in (free) for more, or upgrade to Pro for unlimited.',
-            });
-            controller.close();
-            return;
           }
         }
 
@@ -264,19 +272,23 @@ export async function POST(req: Request) {
         }
 
         // ---- Record usage + save manual ----
-        await admin.from('usage').insert({ user_id: user ? user.id : null, ip, kind: 'manual' });
-
-        if (user && full) {
-          const { meta, body: manualBody } = splitMeta(full);
-          const title = (meta && meta.product) || subject || 'Manual';
-          await admin.from('manuals').insert({
-            user_id: user.id,
-            title,
-            type: (meta && meta.type) || 'synthesized',
-            body: manualBody || full,
-            meta: meta || null,
-            official_manual: (meta && meta.officialManual) || null,
-          });
+        if (DB_ENABLED && admin) {
+          try {
+            await admin.from('usage').insert({ user_id: user ? user.id : null, ip, kind: 'manual' });
+            if (user && full) {
+              const { meta, body: manualBody } = splitMeta(full);
+              await admin.from('manuals').insert({
+                user_id: user.id,
+                title: (meta && meta.product) || subject || 'Manual',
+                type: (meta && meta.type) || 'synthesized',
+                body: manualBody || full,
+                meta: meta || null,
+                official_manual: (meta && meta.officialManual) || null,
+              });
+            }
+          } catch {
+            // non-fatal: still return the manual to the user
+          }
         }
 
         send({ stage: 'done' });
