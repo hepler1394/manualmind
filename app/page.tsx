@@ -8,6 +8,7 @@ marked.setOptions({ breaks: true, gfm: true });
 
 type Meta = { product?: string; officialManual?: string; type?: string; confidence?: string };
 type Space = { id: string; name: string };
+type Reminder = { id: string; manual_id: string | null; label: string; interval_days: number; next_due: string };
 type LibItem = {
   id: string;
   title: string;
@@ -25,6 +26,7 @@ type Me = {
   limit?: number | null;
   manuals?: any[];
   spaces?: Space[];
+  reminders?: Reminder[];
 };
 
 const STAGES = [
@@ -76,6 +78,30 @@ function decodeShare(s: string): { meta: Meta | null; body: string } | null {
   }
 }
 
+function todayISO(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function cardHtml(title: string, inner: string): string {
+  const safe = title.replace(/</g, '&lt;');
+  return (
+    '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>' +
+    safe +
+    ' — Quick-start card</title><style>' +
+    'body{font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:720px;margin:24px auto;padding:0 20px;color:#111;}' +
+    'h1{font-size:22px;margin:0 0 4px;}h2{font-size:16px;margin:18px 0 6px;}' +
+    '.head{border-bottom:2px solid #111;padding-bottom:8px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:baseline;gap:10px;}' +
+    '.brand{font-size:12px;color:#666;white-space:nowrap;}ol,ul{padding-left:20px;}li{margin:4px 0;line-height:1.45;}' +
+    '.btn{margin:18px 0;padding:10px 16px;border:1px solid #111;background:#111;color:#fff;border-radius:8px;cursor:pointer;font-size:14px;}' +
+    '@media print{.btn{display:none;}body{margin:0;}}' +
+    '</style></head><body><div class="head"><h1>' +
+    safe +
+    '</h1><span class="brand">ManualMind quick-start</span></div>' +
+    inner +
+    '<button class="btn" onclick="window.print()">Print / Save as PDF</button></body></html>'
+  );
+}
+
 export default function Home() {
   const [query, setQuery] = useState('');
   const [image, setImage] = useState<string | null>(null);
@@ -97,11 +123,15 @@ export default function Home() {
   const [chat, setChat] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [chatRunning, setChatRunning] = useState(false);
+  const [remLabel, setRemLabel] = useState('');
+  const [remInterval, setRemInterval] = useState('90');
+  const [busyCard, setBusyCard] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const [supabase] = useState(() => (hasAuth ? createClient() : null));
 
   const { meta, body, metaClosed } = splitMeta(raw);
   const spaces: Space[] = me.spaces || [];
+  const reminders: Reminder[] = me.reminders || [];
 
   async function loadMe() {
     if (!hasAuth) return;
@@ -147,6 +177,10 @@ export default function Home() {
   const allLibrary: LibItem[] = me.signedIn ? dbManuals : history;
   const library: LibItem[] =
     me.signedIn && activeSpace ? allLibrary.filter((m) => m.space_id === activeSpace) : allLibrary;
+
+  const today = todayISO();
+  const dueReminders = reminders.filter((r) => r.next_due <= today);
+  const currentReminders = reminders.filter((r) => currentManualId && r.manual_id === currentManualId);
 
   function persistLocal(next: LibItem[]) {
     setHistory(next);
@@ -195,6 +229,12 @@ export default function Home() {
       } catch {}
     }
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function openManualById(id: string | null) {
+    if (!id) return;
+    const item = dbManuals.find((m) => m.id === id);
+    if (item) loadItem(item);
   }
 
   async function deleteItem(item: LibItem) {
@@ -257,6 +297,40 @@ export default function Home() {
     window.print();
   }
 
+  async function makeCard() {
+    if (!body) return;
+    if (hasAuth && me.signedIn && me.plan !== 'pro') {
+      flash('Quick-start cards are a Pro feature. Upgrade to unlock.');
+      return;
+    }
+    setBusyCard(true);
+    flash('Building your quick-start card…');
+    try {
+      const res = await fetch('/api/card', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manualTitle: currentTitle, manualBody: body }),
+      });
+      const data = await res.json();
+      if (!data.card) {
+        flash(data.error || 'Could not build card.');
+        return;
+      }
+      const html = cardHtml(data.title || currentTitle, marked.parse(data.card) as string);
+      const w = window.open('', '_blank');
+      if (w) {
+        w.document.write(html);
+        w.document.close();
+      } else {
+        flash('Allow pop-ups to view the card.');
+      }
+    } catch {
+      flash('Could not build card.');
+    } finally {
+      setBusyCard(false);
+    }
+  }
+
   async function upgrade() {
     try {
       const res = await fetch('/api/stripe/checkout', { method: 'POST' });
@@ -281,6 +355,58 @@ export default function Home() {
     if (supabase) await supabase.auth.signOut();
     setMe({ signedIn: false });
     flash('Signed out');
+  }
+
+  async function addReminder(label: string, interval: number) {
+    if (!label.trim() || !currentManualId) return;
+    await fetch('/api/reminders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manual_id: currentManualId, label, interval_days: interval }),
+    });
+    setRemLabel('');
+    loadMe();
+  }
+  async function reminderDone(id: string) {
+    await fetch('/api/reminders', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    });
+    flash('Nice — rescheduled for next time');
+    loadMe();
+  }
+  async function reminderDelete(id: string) {
+    await fetch('/api/reminders?id=' + encodeURIComponent(id), { method: 'DELETE' });
+    loadMe();
+  }
+  async function suggestReminders() {
+    if (!currentManualId || !body) return;
+    flash('Thinking of maintenance tasks…');
+    try {
+      const res = await fetch('/api/reminders/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ manualTitle: currentTitle, manualBody: body }),
+      });
+      const data = await res.json();
+      const suggestions = data.suggestions || [];
+      if (suggestions.length === 0) {
+        flash('No suggestions found.');
+        return;
+      }
+      for (const s of suggestions) {
+        await fetch('/api/reminders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ manual_id: currentManualId, label: s.label, interval_days: s.interval_days }),
+        });
+      }
+      flash('Added ' + suggestions.length + ' maintenance reminders');
+      loadMe();
+    } catch {
+      flash('Could not suggest reminders.');
+    }
   }
 
   async function run(q?: string) {
@@ -442,6 +568,7 @@ export default function Home() {
   const showResult = body && metaClosed;
   const isPro = me.plan === 'pro';
   const spaceName = (id?: string | null) => spaces.find((s) => s.id === id)?.name;
+  const manualTitleById = (id: string | null) => dbManuals.find((m) => m.id === id)?.title || 'a manual';
 
   return (
     <div className="wrap">
@@ -511,6 +638,20 @@ export default function Home() {
         </div>
       </div>
 
+      {me.signedIn && dueReminders.length > 0 && (
+        <div className="duebar no-print">
+          <h2>🔔 Maintenance due</h2>
+          {dueReminders.map((r) => (
+            <div key={r.id} className="duebar-item">
+              <button onClick={() => openManualById(r.manual_id)}>
+                {r.label} — <span style={{ opacity: 0.7 }}>{manualTitleById(r.manual_id)}</span>
+              </button>
+              <button className="rem-btn" onClick={() => reminderDone(r.id)}>Done</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {!raw && !running && !error && (
         <div className="chips no-print">
           {EXAMPLES.map((ex) => (
@@ -577,6 +718,7 @@ export default function Home() {
       {showResult && !running && (
         <div className="actions no-print">
           <button onClick={savePdf}>⬇️ Save as PDF</button>
+          <button onClick={makeCard} disabled={busyCard}>⚡ Quick-start card</button>
           <button onClick={copyManual}>📋 Copy</button>
           <button onClick={shareManual}>🔗 Share link</button>
         </div>
@@ -586,6 +728,41 @@ export default function Home() {
         <div className="result">
           <div dangerouslySetInnerHTML={{ __html: marked.parse(body) as string }} />
           {running && <span className="cursor" />}
+        </div>
+      )}
+
+      {showResult && !running && me.signedIn && currentManualId && (
+        <div className="reminders no-print">
+          <h2>Maintenance reminders</h2>
+          {currentReminders.map((r) => (
+            <div key={r.id} className="rem-item">
+              <span className="rem-label">{r.label}</span>
+              {r.next_due <= today ? (
+                <span className="rem-badge">Due</span>
+              ) : (
+                <span className="rem-when">every {r.interval_days}d · next {r.next_due}</span>
+              )}
+              <button className="rem-btn" onClick={() => reminderDone(r.id)}>Done</button>
+              <button className="rem-btn" onClick={() => reminderDelete(r.id)}>✕</button>
+            </div>
+          ))}
+          <div className="rem-add">
+            <input
+              type="text"
+              placeholder="e.g. Replace air filter"
+              value={remLabel}
+              onChange={(e) => setRemLabel(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') addReminder(remLabel, parseInt(remInterval, 10)); }}
+            />
+            <select value={remInterval} onChange={(e) => setRemInterval(e.target.value)}>
+              <option value="30">Monthly</option>
+              <option value="90">Every 3 months</option>
+              <option value="180">Every 6 months</option>
+              <option value="365">Yearly</option>
+            </select>
+            <button className="rem-btn" onClick={() => addReminder(remLabel, parseInt(remInterval, 10))}>Add</button>
+            <button className="rem-btn" onClick={suggestReminders}>✨ Suggest</button>
+          </div>
         </div>
       )}
 
@@ -620,7 +797,7 @@ export default function Home() {
         </div>
       )}
 
-      {me.signedIn && spaces.length >= 0 && (allLibrary.length > 0 || spaces.length > 0) && (
+      {me.signedIn && (allLibrary.length > 0 || spaces.length > 0) && (
         <div className="spacesbar no-print">
           <button className={'spacechip' + (activeSpace === null ? ' active' : '')} onClick={() => setActiveSpace(null)}>
             All ({allLibrary.length})
@@ -643,7 +820,7 @@ export default function Home() {
           <h2>{me.signedIn ? (activeSpace ? spaceName(activeSpace) : 'Your library') : 'Recent (saved on this device)'}</h2>
           {!me.signedIn && hasAuth && (
             <p className="hnote">
-              <a href="/login">Sign in</a> to save your library to the cloud, group it into spaces, and chat with any manual.
+              <a href="/login">Sign in</a> to save your library to the cloud, group it into spaces, add maintenance reminders, and chat with any manual.
             </p>
           )}
           <div className="hlist">
