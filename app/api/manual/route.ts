@@ -73,7 +73,10 @@ async function identifyImage(client: Anthropic, image: string, hint: string): Pr
             text:
               'Identify the product or object in this image as specifically as possible (brand, model, and type). ' +
               hintText +
-              'Reply with ONLY the identification (e.g. "Sony WH-1000XM4 headphones"), nothing else.',
+              'Read any visible model number, spec label, or rating plate to pin down the exact model. ' +
+              'If the device is showing an error code or display message, include it. ' +
+              'Reply with ONLY the identification, e.g. "Sony WH-1000XM4 headphones" or ' +
+              '"Samsung WF45T6000AW washer displaying error code 4C", nothing else.',
           },
         ],
       },

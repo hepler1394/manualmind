@@ -3,6 +3,8 @@
 /out
 .env
 .env.local
+.env*.local
 .vercel
+.claude/
 *.tsbuildinfo
 .DS_Store

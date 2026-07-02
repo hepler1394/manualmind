@@ -8,7 +8,7 @@ Type any product, problem, or task (or upload a photo) and ManualMind runs a tie
 2. **Find first** — it web-searches for the *official* manufacturer manual/PDF. If one exists, you get the real thing, linked.
 3. **Synthesize** — when none exists, it pulls real Reddit threads + web results and builds a clean, step-by-step manual in real time, with sources cited.
 
-Extras: photo upload, streamed output, Save-as-PDF, **quick-start cards** (1-page printable), shareable links, a saved manual **library**, **Spaces** (group by home / property / shop), per-manual **follow-up chat**, and **maintenance reminders** with AI suggestions. Accounts + billing make it a subscription product.
+Extras: photo upload (reads model numbers and on-screen error codes), streamed output, Save-as-PDF, **quick-start cards** (1-page printable), shareable links, **public SEO manual pages** (publish any saved manual to `/m/<slug>`, with sitemap + JSON-LD), a saved manual **library**, **Spaces** (group by home / property / shop), per-manual **follow-up chat**, and **maintenance reminders** with AI suggestions. Accounts + billing make it a subscription product.
 
 ---
 
@@ -35,8 +35,8 @@ Add `ANTHROPIC_API_KEY` (https://console.anthropic.com/).
 
 ### 2. Supabase
 1. Create a project at https://supabase.com.
-2. In the SQL editor, run `supabase/schema.sql` (fresh install — creates everything through Phase 3).
-   - Upgrading an existing DB? Run the migration for what you're missing: `supabase/phase2.sql` (spaces + chat), then `supabase/phase3.sql` (reminders).
+2. In the SQL editor, run `supabase/schema.sql` (fresh install — creates everything through Phase 4).
+   - Upgrading an existing DB? Run the migration for what you're missing: `supabase/phase2.sql` (spaces + chat), then `supabase/phase3.sql` (reminders), then `supabase/phase4.sql` (public manual pages).
 3. Copy Project URL + anon key + service-role key into env vars.
 4. Auth → URL Configuration: add your site URL and `…/auth/callback` as a redirect URL. (Optional) enable Google provider.
 
@@ -60,6 +60,6 @@ npm run dev
 
 ## Roadmap
 
-Delivered: tiered manual pipeline, photo ID, streaming, PDF/share (Phase 0–1), accounts + billing, Spaces + per-manual chat (Phase 2), **quick-start cards + maintenance reminders (Phase 3)**, PWA install, CI build check.
+Delivered: tiered manual pipeline, photo ID, streaming, PDF/share (Phase 0–1), accounts + billing, Spaces + per-manual chat (Phase 2), quick-start cards + maintenance reminders (Phase 3), **public SEO manual pages + smart photo — model/serial/error-code reading (Phase 4)**, PWA install, CI build check.
 
-Next: scheduled email delivery of due reminders (cron + email), smart photo (model/serial/error-code reading), public SEO manual pages, Team plan.
+Next: scheduled email delivery of due reminders (cron + email), Team plan, OG images for public pages.

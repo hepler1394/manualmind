@@ -1,4 +1,4 @@
--- ManualMind schema (Phase 1 + 2 + 3). Run once in the Supabase SQL editor.
+-- ManualMind schema (Phase 1 + 2 + 3 + 4). Run once in the Supabase SQL editor.
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -26,10 +26,14 @@ create table if not exists public.manuals (
   body text not null,
   meta jsonb,
   official_manual text,
+  public_slug text,
+  published_at timestamptz,
   created_at timestamptz default now()
 );
 create index if not exists manuals_user_idx on public.manuals(user_id, created_at desc);
 create index if not exists manuals_space_idx on public.manuals(space_id);
+create unique index if not exists manuals_public_slug_idx
+  on public.manuals(public_slug) where public_slug is not null;
 
 create table if not exists public.manual_chats (
   id uuid primary key default gen_random_uuid(),
@@ -82,6 +86,10 @@ create policy "own spaces" on public.spaces for all
 drop policy if exists "own manuals" on public.manuals;
 create policy "own manuals" on public.manuals for all
   using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "published manuals are public" on public.manuals;
+create policy "published manuals are public" on public.manuals
+  for select using (public_slug is not null);
 
 drop policy if exists "own chats" on public.manual_chats;
 create policy "own chats" on public.manual_chats for all

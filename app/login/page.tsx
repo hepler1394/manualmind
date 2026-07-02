@@ -9,12 +9,15 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const supabase = createClient();
+  const hasAuth =
+    !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const [supabase] = useState(() => (hasAuth ? createClient() : null));
   const redirectTo =
     typeof window !== 'undefined' ? window.location.origin + '/auth/callback' : undefined;
 
   async function sendLink(e: React.FormEvent) {
     e.preventDefault();
+    if (!supabase) return;
     setError(null);
     setBusy(true);
     const { error } = await supabase.auth.signInWithOtp({
@@ -27,6 +30,7 @@ export default function Login() {
   }
 
   async function google() {
+    if (!supabase) return;
     setError(null);
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -44,7 +48,12 @@ export default function Login() {
       <p className="tagline">Sign in to save your manual library and unlock Pro.</p>
 
       <div className="panel" style={{ maxWidth: 420, margin: '30px auto 0' }}>
-        {sent ? (
+        {!hasAuth ? (
+          <p style={{ margin: 0, lineHeight: 1.6, color: 'var(--muted)' }}>
+            Accounts are not enabled on this deployment. Add the Supabase env vars to turn on
+            sign-in, cloud library, spaces, and reminders.
+          </p>
+        ) : sent ? (
           <p style={{ margin: 0, lineHeight: 1.6 }}>
             Check your email — we sent a magic sign-in link to <strong>{email}</strong>.
           </p>

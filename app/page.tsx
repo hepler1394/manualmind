@@ -16,6 +16,7 @@ type LibItem = {
   body: string;
   meta: Meta | null;
   space_id?: string | null;
+  public_slug?: string | null;
 };
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
 type Me = {
@@ -173,6 +174,7 @@ export default function Home() {
     body: m.body,
     meta: m.meta || (m.official_manual ? { officialManual: m.official_manual, type: m.type } : null),
     space_id: m.space_id || null,
+    public_slug: m.public_slug || null,
   }));
   const allLibrary: LibItem[] = me.signedIn ? dbManuals : history;
   const library: LibItem[] =
@@ -329,6 +331,44 @@ export default function Home() {
     } finally {
       setBusyCard(false);
     }
+  }
+
+  async function publishManual() {
+    if (!currentManualId) return;
+    try {
+      const res = await fetch('/api/publish', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentManualId }),
+      });
+      const data = await res.json();
+      if (!data.slug) {
+        flash(data.error || 'Could not publish.');
+        return;
+      }
+      const url = window.location.origin + '/m/' + data.slug;
+      try {
+        await navigator.clipboard.writeText(url);
+        flash('Published — public link copied');
+      } catch {
+        flash('Published at ' + url);
+      }
+      loadMe();
+    } catch {
+      flash('Could not publish.');
+    }
+  }
+
+  function copyPublicLink(slug: string) {
+    const url = window.location.origin + '/m/' + slug;
+    navigator.clipboard.writeText(url).then(() => flash('Public link copied'));
+  }
+
+  async function unpublishManual() {
+    if (!currentManualId) return;
+    await fetch('/api/publish?id=' + encodeURIComponent(currentManualId), { method: 'DELETE' });
+    flash('Manual is private again');
+    loadMe();
   }
 
   async function upgrade() {
@@ -569,6 +609,8 @@ export default function Home() {
   const isPro = me.plan === 'pro';
   const spaceName = (id?: string | null) => spaces.find((s) => s.id === id)?.name;
   const manualTitleById = (id: string | null) => dbManuals.find((m) => m.id === id)?.title || 'a manual';
+  const currentDbManual = currentManualId ? dbManuals.find((m) => m.id === currentManualId) : undefined;
+  const publicSlug = currentDbManual?.public_slug || null;
 
   return (
     <div className="wrap">
@@ -721,6 +763,18 @@ export default function Home() {
           <button onClick={makeCard} disabled={busyCard}>⚡ Quick-start card</button>
           <button onClick={copyManual}>📋 Copy</button>
           <button onClick={shareManual}>🔗 Share link</button>
+          {me.signedIn && currentDbManual && (
+            publicSlug ? (
+              <>
+                <button onClick={() => copyPublicLink(publicSlug)}>🌍 Public link</button>
+                <button onClick={unpublishManual}>Unpublish</button>
+              </>
+            ) : (
+              <button onClick={publishManual} title="Create a public web page for this manual">
+                🌍 Publish page
+              </button>
+            )
+          )}
         </div>
       )}
 

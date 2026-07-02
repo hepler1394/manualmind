@@ -145,6 +145,12 @@ button.go:disabled { opacity: 0.5; cursor: default; }
 .hdel { background: var(--card); border: 1px solid var(--line); color: var(--muted); border-radius: 10px; width: 46px; cursor: pointer; font-size: 13px; }
 .hdel:hover { color: #fca5a5; border-color: rgba(248,113,113,0.5); }
 
+.pub-brand { display: inline-flex; align-items: center; gap: 9px; color: var(--text); text-decoration: none; font-weight: 800; font-size: 18px; letter-spacing: -0.01em; margin-top: 8px; }
+.pub-brand:hover { color: var(--accent); }
+.pub-cta { margin-top: 26px; background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 20px; text-align: center; }
+.pub-cta p { color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
+.pub-cta a { display: inline-block; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #0b0d12; font-weight: 700; border-radius: 12px; padding: 12px 20px; text-decoration: none; }
+
 .err { margin-top: 20px; border: 1px solid rgba(248,113,113,0.5); background: rgba(248,113,113,0.08); color: #fca5a5; border-radius: 12px; padding: 14px 16px; font-size: 14px; line-height: 1.5; }
 .limitcta { margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap; }
 .footer { text-align: center; color: var(--muted); font-size: 12.5px; margin-top: 40px; }
