@@ -3,6 +3,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { createClient } from '@/lib/supabase/client';
+import {
+  IconBook, IconCamera, IconSearch, IconShieldCheck, IconMessage, IconSparkles,
+  IconBell, IconDownload, IconCopy, IconLink, IconGlobe, IconZap, IconX, IconPlus,
+  IconFolder, IconArrowRight, TypeIcon,
+} from './icons';
 
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -600,7 +605,6 @@ export default function Home() {
   }
 
   const bannerClass = meta && meta.type ? meta.type : 'synthesized';
-  const bannerIcon = meta?.type === 'official' ? '✅' : meta?.type === 'community' ? '💬' : '✨';
   const bannerTitle =
     meta?.type === 'official' ? 'Official manual found'
       : meta?.type === 'community' ? 'Built from community knowledge'
@@ -612,38 +616,54 @@ export default function Home() {
   const currentDbManual = currentManualId ? dbManuals.find((m) => m.id === currentManualId) : undefined;
   const publicSlug = currentDbManual?.public_slug || null;
 
+  const idle = !raw && !running && !error;
+
   return (
     <div className="wrap">
-      {hasAuth && (
-        <div className="topbar no-print">
-          {me.signedIn ? (
-            <>
-              <span className={'plan ' + (isPro ? 'pro' : '')}>{isPro ? 'PRO' : 'FREE'}</span>
-              {!isPro && me.limit != null && (
-                <span className="usage">{(me.usedThisMonth || 0)} / {me.limit} this month</span>
-              )}
-              <span className="email">{me.email}</span>
-              {isPro ? (
-                <button className="tb" onClick={manageBilling}>Manage</button>
-              ) : (
-                <button className="tb up" onClick={upgrade}>Upgrade $20/mo</button>
-              )}
-              <button className="tb" onClick={signOut}>Sign out</button>
-            </>
-          ) : (
-            <a className="tb" href="/login">Sign in</a>
-          )}
-        </div>
-      )}
-
-      <div className="brand no-print">
-        <div className="logo">📘</div>
-        <h1>ManualMind</h1>
+      <div className="nav no-print">
+        <a className="wordmark" href="/">
+          <span className="logo"><IconBook size={17} /></span>
+          ManualMind
+        </a>
+        {hasAuth && (
+          <div className="topbar">
+            {me.signedIn ? (
+              <>
+                <span className={'plan ' + (isPro ? 'pro' : '')}>{isPro ? 'PRO' : 'FREE'}</span>
+                {!isPro && me.limit != null && (
+                  <span className="usage">{(me.usedThisMonth || 0)} / {me.limit} this month</span>
+                )}
+                <span className="email">{me.email}</span>
+                {isPro ? (
+                  <button className="tb" onClick={manageBilling}>Manage</button>
+                ) : (
+                  <button className="tb up" onClick={upgrade}>Upgrade $20/mo</button>
+                )}
+                <button className="tb" onClick={signOut}>Sign out</button>
+              </>
+            ) : (
+              <a className="tb" href="/login">Sign in</a>
+            )}
+          </div>
+        )}
       </div>
-      <p className="tagline no-print">
-        A manual for <em>anything</em>. Type it, or snap a photo — ManualMind finds the official
-        guide, or builds one in real time from Reddit and the web.
-      </p>
+
+      <div className="hero no-print">
+        {idle && (
+          <div className="herobadge">
+            <IconSparkles size={14} />
+            Finds the official manual first — cites every source
+          </div>
+        )}
+        <h1>
+          The manual for <span className="grad">anything</span>.
+        </h1>
+        <p className="tagline">
+          Type a product, a problem, or an error code — or just snap a photo. ManualMind hunts down
+          the official manufacturer manual, and when one doesn&apos;t exist, it writes you a better one
+          in seconds from real fixes people actually posted.
+        </p>
+      </div>
 
       <div className="panel no-print">
         <div className="searchrow">
@@ -660,7 +680,7 @@ export default function Home() {
         </div>
         <div className="tools">
           <label className="upload">
-            📷 Upload a photo
+            <IconCamera size={16} /> Upload a photo
             <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFile} />
           </label>
           {image && <img className="thumb" src={image} alt="upload preview" />}
@@ -682,7 +702,7 @@ export default function Home() {
 
       {me.signedIn && dueReminders.length > 0 && (
         <div className="duebar no-print">
-          <h2>🔔 Maintenance due</h2>
+          <h2><IconBell size={15} /> Maintenance due</h2>
           {dueReminders.map((r) => (
             <div key={r.id} className="duebar-item">
               <button onClick={() => openManualById(r.manual_id)}>
@@ -720,7 +740,7 @@ export default function Home() {
 
       {identified && (
         <div className="banner community no-print" style={{ marginTop: 14 }}>
-          <span className="ico">🔍</span>
+          <span className="ico"><IconSearch size={17} /></span>
           <div><h3>Identified from your photo</h3><p>{identified}</p></div>
         </div>
       )}
@@ -745,7 +765,7 @@ export default function Home() {
 
       {meta && metaClosed && (
         <div className={'banner ' + bannerClass}>
-          <span className="ico">{bannerIcon}</span>
+          <span className="ico"><TypeIcon type={meta?.type} size={17} /></span>
           <div>
             <h3>{bannerTitle}{meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}</h3>
             {meta.officialManual ? (
@@ -759,19 +779,19 @@ export default function Home() {
 
       {showResult && !running && (
         <div className="actions no-print">
-          <button onClick={savePdf}>⬇️ Save as PDF</button>
-          <button onClick={makeCard} disabled={busyCard}>⚡ Quick-start card</button>
-          <button onClick={copyManual}>📋 Copy</button>
-          <button onClick={shareManual}>🔗 Share link</button>
+          <button onClick={savePdf}><IconDownload size={15} /> Save as PDF</button>
+          <button onClick={makeCard} disabled={busyCard}><IconZap size={15} /> Quick-start card</button>
+          <button onClick={copyManual}><IconCopy size={15} /> Copy</button>
+          <button onClick={shareManual}><IconLink size={15} /> Share link</button>
           {me.signedIn && currentDbManual && (
             publicSlug ? (
               <>
-                <button onClick={() => copyPublicLink(publicSlug)}>🌍 Public link</button>
+                <button onClick={() => copyPublicLink(publicSlug)}><IconGlobe size={15} /> Public link</button>
                 <button onClick={unpublishManual}>Unpublish</button>
               </>
             ) : (
               <button onClick={publishManual} title="Create a public web page for this manual">
-                🌍 Publish page
+                <IconGlobe size={15} /> Publish page
               </button>
             )
           )}
@@ -787,7 +807,7 @@ export default function Home() {
 
       {showResult && !running && me.signedIn && currentManualId && (
         <div className="reminders no-print">
-          <h2>Maintenance reminders</h2>
+          <h2><IconBell size={15} /> Maintenance reminders</h2>
           {currentReminders.map((r) => (
             <div key={r.id} className="rem-item">
               <span className="rem-label">{r.label}</span>
@@ -797,7 +817,7 @@ export default function Home() {
                 <span className="rem-when">every {r.interval_days}d · next {r.next_due}</span>
               )}
               <button className="rem-btn" onClick={() => reminderDone(r.id)}>Done</button>
-              <button className="rem-btn" onClick={() => reminderDelete(r.id)}>✕</button>
+              <button className="rem-btn" onClick={() => reminderDelete(r.id)} aria-label="delete reminder"><IconX size={13} /></button>
             </div>
           ))}
           <div className="rem-add">
@@ -815,14 +835,14 @@ export default function Home() {
               <option value="365">Yearly</option>
             </select>
             <button className="rem-btn" onClick={() => addReminder(remLabel, parseInt(remInterval, 10))}>Add</button>
-            <button className="rem-btn" onClick={suggestReminders}>✨ Suggest</button>
+            <button className="rem-btn" onClick={suggestReminders}><IconSparkles size={13} /> Suggest</button>
           </div>
         </div>
       )}
 
       {showResult && !running && (
         <div className="chat no-print">
-          <h2>Ask a follow-up</h2>
+          <h2><IconMessage size={15} /> Ask a follow-up</h2>
           {chat.length > 0 && (
             <div className="msgs">
               {chat.map((m, i) => (
@@ -861,11 +881,11 @@ export default function Home() {
             return (
               <span key={s.id} className={'spacechip wrap2' + (activeSpace === s.id ? ' active' : '')}>
                 <button className="sc-main" onClick={() => setActiveSpace(s.id)}>{s.name} ({c})</button>
-                <button className="sc-del" onClick={() => deleteSpace(s.id)} aria-label="delete space">✕</button>
+                <button className="sc-del" onClick={() => deleteSpace(s.id)} aria-label="delete space"><IconX size={13} /></button>
               </span>
             );
           })}
-          <button className="spacechip add" onClick={createSpace}>+ New space</button>
+          <button className="spacechip add" onClick={createSpace}><IconPlus size={13} />&nbsp;New space</button>
         </div>
       )}
 
@@ -881,7 +901,7 @@ export default function Home() {
             {library.map((h) => (
               <div key={h.id} className="hitem">
                 <button className="hmain" onClick={() => loadItem(h)}>
-                  <span className="htype">{h.type === 'official' ? '✅' : h.type === 'community' ? '💬' : '✨'}</span>
+                  <span className="htype"><TypeIcon type={h.type} /></span>
                   <span className="htitle">{h.title}</span>
                 </button>
                 {me.signedIn && spaces.length > 0 && (
@@ -897,11 +917,121 @@ export default function Home() {
                     ))}
                   </select>
                 )}
-                <button className="hdel" onClick={() => deleteItem(h)} aria-label="delete">✕</button>
+                <button className="hdel" onClick={() => deleteItem(h)} aria-label="delete"><IconX size={14} /></button>
               </div>
             ))}
           </div>
         </div>
+      )}
+
+      {!me.signedIn && idle && (
+        <>
+          <div className="trust no-print">
+            <span><IconShieldCheck size={16} /> Official manuals first</span>
+            <span><IconMessage size={16} /> Real fixes from real people</span>
+            <span><IconLink size={16} /> Every step sourced</span>
+          </div>
+
+          <div className="section no-print">
+            <div className="kicker">How it works</div>
+            <h2 className="big">From “what is this thing” to fixed, in one search</h2>
+            <p className="sub">
+              ManualMind runs a three-stage pipeline on every request, and you watch it happen live.
+            </p>
+            <div className="howgrid">
+              <div className="howcard">
+                <span className="step">01</span>
+                <span className="icon"><IconCamera size={20} /></span>
+                <h3>Tell it anything</h3>
+                <p>
+                  A product name, an error code, a weird noise, a task you&apos;ve never done. Or upload a
+                  photo — it reads brands, model plates, and even the error on the screen.
+                </p>
+              </div>
+              <div className="howcard">
+                <span className="step">02</span>
+                <span className="icon"><IconShieldCheck size={20} /></span>
+                <h3>It hunts the official manual</h3>
+                <p>
+                  Before writing a word, it searches the manufacturer&apos;s own documentation. If the
+                  real manual exists, you get it — linked, with a direct source.
+                </p>
+              </div>
+              <div className="howcard">
+                <span className="step">03</span>
+                <span className="icon"><IconSparkles size={20} /></span>
+                <h3>Or writes a better one</h3>
+                <p>
+                  No manual? It builds one in front of you — step-by-step, with tips, common mistakes,
+                  and troubleshooting pulled from real Reddit threads and the web. Every source cited.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="section no-print">
+            <div className="kicker">Everything after the manual</div>
+            <h2 className="big">Built to run your whole household</h2>
+            <p className="sub">
+              Manuals are just the start. ManualMind becomes the operating guide for everything you own.
+            </p>
+            <div className="featgrid">
+              <div className="featcard">
+                <span className="icon"><IconFolder size={17} /></span>
+                <div>
+                  <h3>Library &amp; Spaces</h3>
+                  <p>Every manual saved and grouped by place — My Home, The Shop, Unit 4B.</p>
+                </div>
+              </div>
+              <div className="featcard">
+                <span className="icon"><IconMessage size={17} /></span>
+                <div>
+                  <h3>Ask follow-ups</h3>
+                  <p>Stuck on step 3? Every manual has its own chat that knows the context.</p>
+                </div>
+              </div>
+              <div className="featcard">
+                <span className="icon"><IconBell size={17} /></span>
+                <div>
+                  <h3>Maintenance reminders</h3>
+                  <p>Filter changes, oil, batteries — on schedule, with AI-suggested intervals.</p>
+                </div>
+              </div>
+              <div className="featcard">
+                <span className="icon"><IconZap size={17} /></span>
+                <div>
+                  <h3>Quick-start cards</h3>
+                  <p>Any manual boiled down to one printable page. Tape it to the machine.</p>
+                </div>
+              </div>
+              <div className="featcard">
+                <span className="icon"><IconDownload size={17} /></span>
+                <div>
+                  <h3>PDF &amp; share</h3>
+                  <p>Save as PDF or send a link. Your fix becomes someone else&apos;s fix.</p>
+                </div>
+              </div>
+              <div className="featcard">
+                <span className="icon"><IconGlobe size={17} /></span>
+                <div>
+                  <h3>Publish to the web</h3>
+                  <p>Turn any manual into a public page with its own link — searchable by anyone.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="ctaband no-print">
+            <h2>Lost the manual? Never again.</h2>
+            <p>
+              Three free manuals a day, no account needed. Sign up free for a cloud library, spaces,
+              chat, and reminders.
+            </p>
+            <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
+              Get your first manual <IconArrowRight size={16} />
+            </button>
+          </div>
+        </>
       )}
 
       <div className="footer no-print">

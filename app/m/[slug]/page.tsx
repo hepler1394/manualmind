@@ -4,6 +4,7 @@ import { cache } from 'react';
 import { marked } from 'marked';
 import { createClient } from '@supabase/supabase-js';
 import { siteUrl } from '@/lib/site';
+import { IconBook, TypeIcon } from '../../icons';
 
 export const revalidate = 300;
 
@@ -72,7 +73,6 @@ export default async function PublicManualPage({ params }: { params: { slug: str
   if (!manual) notFound();
 
   const type = manual.type || 'synthesized';
-  const bannerIcon = type === 'official' ? '✅' : type === 'community' ? '💬' : '✨';
   const bannerTitle =
     type === 'official' ? 'Official manual found'
       : type === 'community' ? 'Built from community knowledge'
@@ -93,12 +93,12 @@ export default async function PublicManualPage({ params }: { params: { slug: str
     <div className="wrap">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <a className="pub-brand no-print" href="/">
-        <span className="logo" style={{ width: 30, height: 30, fontSize: 17, borderRadius: 9 }}>📘</span>
+        <span className="logo" style={{ width: 30, height: 30, borderRadius: 9 }}><IconBook size={15} /></span>
         ManualMind
       </a>
 
       <div className={'banner ' + type}>
-        <span className="ico">{bannerIcon}</span>
+        <span className="ico"><TypeIcon type={type} size={17} /></span>
         <div>
           <h3>{bannerTitle}</h3>
           {manual.official_manual ? (

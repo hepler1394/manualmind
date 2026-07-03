@@ -39,8 +39,8 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: 72,
-          background: 'linear-gradient(135deg, #0b0d12 0%, #161a24 60%, #1b2335 100%)',
-          color: '#e7eaf0',
+          background: 'linear-gradient(135deg, #ffffff 0%, #f2f3fb 55%, #ece9fb 100%)',
+          color: '#0f172a',
           fontFamily: 'sans-serif',
         }}
       >
@@ -50,14 +50,16 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
               width: 64,
               height: 64,
               borderRadius: 16,
-              background: 'linear-gradient(135deg, #6ea8fe, #a78bfa)',
+              background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: 36,
             }}
           >
-            📘
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 7v14" />
+              <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
+            </svg>
           </div>
           <div style={{ fontSize: 40, fontWeight: 700 }}>ManualMind</div>
         </div>
@@ -78,8 +80,8 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
           <div
             style={{
               fontSize: 28,
-              color: '#0b0d12',
-              background: 'linear-gradient(135deg, #6ea8fe, #a78bfa)',
+              color: '#ffffff',
+              background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
               padding: '12px 28px',
               borderRadius: 999,
               fontWeight: 700,
@@ -87,7 +89,7 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
           >
             {kind}
           </div>
-          <div style={{ fontSize: 26, color: '#9aa3b2' }}>Step-by-step · Sources cited</div>
+          <div style={{ fontSize: 26, color: '#5b6478' }}>Step-by-step · Sources cited</div>
         </div>
       </div>
     ),

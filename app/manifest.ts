@@ -8,8 +8,8 @@ export default function manifest(): MetadataRoute.Manifest {
       'Find the official manual for anything, or build one in real time from Reddit and the web.',
     start_url: '/',
     display: 'standalone',
-    background_color: '#0b0d12',
-    theme_color: '#0b0d12',
+    background_color: '#ffffff',
+    theme_color: '#4f46e5',
     icons: [
       { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'any' },
       { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml', purpose: 'maskable' },
