@@ -27,7 +27,7 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
   const kind =
     manual?.type === 'official' ? 'Official manual'
       : manual?.type === 'community' ? 'Community-sourced manual'
-      : 'AI-synthesized manual';
+      : 'AI-built manual';
 
   return new ImageResponse(
     (
@@ -38,37 +38,20 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'space-between',
-          padding: 72,
-          background: 'linear-gradient(135deg, #ffffff 0%, #f2f3fb 55%, #ece9fb 100%)',
-          color: '#0f172a',
+          padding: 76,
+          background: '#f5f5f7',
+          color: '#1d1d1f',
           fontFamily: 'sans-serif',
         }}
       >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-          <div
-            style={{
-              width: 64,
-              height: 64,
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 7v14" />
-              <path d="M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z" />
-            </svg>
-          </div>
-          <div style={{ fontSize: 40, fontWeight: 700 }}>ManualMind</div>
-        </div>
+        <div style={{ fontSize: 38, fontWeight: 700, letterSpacing: -1 }}>ManualMind</div>
 
         <div
           style={{
-            fontSize: title.length > 60 ? 52 : 64,
+            fontSize: title.length > 60 ? 54 : 66,
             fontWeight: 700,
-            lineHeight: 1.15,
+            lineHeight: 1.1,
+            letterSpacing: -1.5,
             maxWidth: 1040,
             display: 'flex',
           }}
@@ -79,17 +62,17 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div
             style={{
-              fontSize: 28,
+              fontSize: 26,
               color: '#ffffff',
-              background: 'linear-gradient(135deg, #4f46e5, #7c3aed)',
+              background: '#0071e3',
               padding: '12px 28px',
               borderRadius: 999,
-              fontWeight: 700,
+              fontWeight: 600,
             }}
           >
             {kind}
           </div>
-          <div style={{ fontSize: 26, color: '#5b6478' }}>Step-by-step · Sources cited</div>
+          <div style={{ fontSize: 26, color: '#6e6e73' }}>Step-by-step · Sources cited</div>
         </div>
       </div>
     ),

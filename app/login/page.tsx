@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { IconBook } from '../icons';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -42,8 +41,7 @@ export default function Login() {
 
   return (
     <div className="wrap">
-      <div className="brand" style={{ marginTop: 48 }}>
-        <div className="logo"><IconBook size={17} /></div>
+      <div className="brand" style={{ marginTop: 56 }}>
         <h1>ManualMind</h1>
       </div>
       <p className="tagline" style={{ textAlign: 'center' }}>Sign in to save your manual library and unlock Pro.</p>

@@ -3,11 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { marked } from 'marked';
 import { createClient } from '@/lib/supabase/client';
-import {
-  IconBook, IconCamera, IconSearch, IconShieldCheck, IconMessage, IconSparkles,
-  IconBell, IconDownload, IconCopy, IconLink, IconGlobe, IconZap, IconX, IconPlus,
-  IconFolder, IconArrowRight, TypeIcon,
-} from './icons';
 
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -36,11 +31,18 @@ type Me = {
 };
 
 const STAGES = [
-  { key: 'identify', label: 'Identifying photo' },
+  { key: 'identify', label: 'Reading upload' },
   { key: 'reddit', label: 'Scanning Reddit' },
+  { key: 'youtube', label: 'Finding videos' },
   { key: 'searching', label: 'Searching the web' },
   { key: 'generate', label: 'Building manual' },
 ];
+
+type Video = { id: string; title: string };
+
+function typeLabel(type?: string | null): string {
+  return type === 'official' ? 'Official' : type === 'community' ? 'Community' : 'AI-built';
+}
 
 const EXAMPLES = [
   'Reset a Nest thermostat to factory settings',
@@ -111,6 +113,9 @@ function cardHtml(title: string, inner: string): string {
 export default function Home() {
   const [query, setQuery] = useState('');
   const [image, setImage] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [videos, setVideos] = useState<Video[]>([]);
+  const [libHits, setLibHits] = useState<{ slug: string; title: string; type: string | null }[]>([]);
   const [raw, setRaw] = useState('');
   const [active, setActive] = useState<string | null>(null);
   const [doneStages, setDoneStages] = useState<Set<string>>(new Set());
@@ -199,10 +204,36 @@ export default function Home() {
   function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
+    if (f.size > 3.5 * 1024 * 1024) {
+      flash('File too large — keep it under 3.5 MB.');
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = () => setImage(reader.result as string);
+    reader.onload = () => {
+      setImage(reader.result as string);
+      setFileName(f.type === 'application/pdf' ? f.name : null);
+    };
     reader.readAsDataURL(f);
   }
+
+  // Live search of the public manual library while typing.
+  useEffect(() => {
+    const q = query.trim();
+    if (!hasAuth || q.length < 3 || running) {
+      setLibHits([]);
+      return;
+    }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/search?q=' + encodeURIComponent(q));
+        const data = await res.json();
+        setLibHits(data.results || []);
+      } catch {
+        setLibHits([]);
+      }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query, running]);
 
   function saveLocal(finalRaw: string) {
     const parsed = splitMeta(finalRaw);
@@ -223,8 +254,9 @@ export default function Home() {
     setRunning(false);
     setIdentified(null);
     setRedditCount(null);
+    setVideos([]);
     setRaw('```meta\n' + JSON.stringify(item.meta || {}) + '\n```\n\n' + item.body);
-    setDoneStages(new Set(['identify', 'reddit', 'searching', 'generate']));
+    setDoneStages(new Set(['identify', 'reddit', 'youtube', 'searching', 'generate']));
     setCurrentManualId(item.id);
     setCurrentTitle(item.title);
     setChat([]);
@@ -463,6 +495,8 @@ export default function Home() {
     setLimitHit(false);
     setIdentified(null);
     setRedditCount(null);
+    setVideos([]);
+    setLibHits([]);
     setDoneStages(new Set());
     setActive(image ? 'identify' : 'reddit');
     setRunning(true);
@@ -510,7 +544,9 @@ export default function Home() {
               markDone('identify'); setActive('reddit'); break;
             case 'reddit': setActive('reddit'); break;
             case 'reddit_done':
-              setRedditCount(evt.count); markDone('reddit'); setActive('searching'); break;
+              setRedditCount(evt.count); markDone('reddit'); setActive('youtube'); break;
+            case 'youtube_done':
+              setVideos(evt.videos || []); markDone('youtube'); setActive('searching'); break;
             case 'searching': setActive('searching'); break;
             case 'generate': markDone('searching'); setActive('generate'); break;
             case 'token':
@@ -621,10 +657,7 @@ export default function Home() {
   return (
     <div className="wrap">
       <div className="nav no-print">
-        <a className="wordmark" href="/">
-          <span className="logo"><IconBook size={17} /></span>
-          ManualMind
-        </a>
+        <a className="wordmark" href="/">ManualMind</a>
         {hasAuth && (
           <div className="topbar">
             {me.signedIn ? (
@@ -649,19 +682,12 @@ export default function Home() {
       </div>
 
       <div className="hero no-print">
-        {idle && (
-          <div className="herobadge">
-            <IconSparkles size={14} />
-            Finds the official manual first — cites every source
-          </div>
-        )}
-        <h1>
-          The manual for <span className="grad">anything</span>.
-        </h1>
+        {idle && <div className="herobadge">The answer engine for everything you own.</div>}
+        <h1>The manual for anything.</h1>
         <p className="tagline">
-          Type a product, a problem, or an error code — or just snap a photo. ManualMind hunts down
-          the official manufacturer manual, and when one doesn&apos;t exist, it writes you a better one
-          in seconds from real fixes people actually posted.
+          A product, a problem, an error code — or a photo, or a PDF. ManualMind finds the official
+          manual, the best Reddit fixes, and the right videos. And when no manual exists, it writes
+          you a better one.
         </p>
       </div>
 
@@ -680,12 +706,16 @@ export default function Home() {
         </div>
         <div className="tools">
           <label className="upload">
-            <IconCamera size={16} /> Upload a photo
-            <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onFile} />
+            Upload a photo or PDF
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" style={{ display: 'none' }} onChange={onFile} />
           </label>
-          {image && <img className="thumb" src={image} alt="upload preview" />}
+          {image && (fileName ? (
+            <span className="filechip">{fileName}</span>
+          ) : (
+            <img className="thumb" src={image} alt="upload preview" />
+          ))}
           {image && (
-            <button className="clearimg" onClick={() => { setImage(null); if (fileRef.current) fileRef.current.value = ''; }}>
+            <button className="clearimg" onClick={() => { setImage(null); setFileName(null); if (fileRef.current) fileRef.current.value = ''; }}>
               remove
             </button>
           )}
@@ -700,9 +730,21 @@ export default function Home() {
         </div>
       </div>
 
+      {libHits.length > 0 && idle && (
+        <div className="libresults no-print">
+          <div className="lr-head">From the manual library</div>
+          {libHits.map((h) => (
+            <a key={h.slug} className="lr-item" href={'/m/' + h.slug}>
+              <div className="lr-title">{h.title}</div>
+              <div className="lr-sub">{typeLabel(h.type)} manual · ready now</div>
+            </a>
+          ))}
+        </div>
+      )}
+
       {me.signedIn && dueReminders.length > 0 && (
         <div className="duebar no-print">
-          <h2><IconBell size={15} /> Maintenance due</h2>
+          <h2>Maintenance due</h2>
           {dueReminders.map((r) => (
             <div key={r.id} className="duebar-item">
               <button onClick={() => openManualById(r.manual_id)}>
@@ -740,8 +782,8 @@ export default function Home() {
 
       {identified && (
         <div className="banner community no-print" style={{ marginTop: 14 }}>
-          <span className="ico"><IconSearch size={17} /></span>
-          <div><h3>Identified from your photo</h3><p>{identified}</p></div>
+          <span className="tag">Identified</span>
+          <div><h3>From your upload</h3><p>{identified}</p></div>
         </div>
       )}
 
@@ -765,7 +807,7 @@ export default function Home() {
 
       {meta && metaClosed && (
         <div className={'banner ' + bannerClass}>
-          <span className="ico"><TypeIcon type={meta?.type} size={17} /></span>
+          <span className="tag">{typeLabel(meta?.type)}</span>
           <div>
             <h3>{bannerTitle}{meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}</h3>
             {meta.officialManual ? (
@@ -779,22 +821,36 @@ export default function Home() {
 
       {showResult && !running && (
         <div className="actions no-print">
-          <button onClick={savePdf}><IconDownload size={15} /> Save as PDF</button>
-          <button onClick={makeCard} disabled={busyCard}><IconZap size={15} /> Quick-start card</button>
-          <button onClick={copyManual}><IconCopy size={15} /> Copy</button>
-          <button onClick={shareManual}><IconLink size={15} /> Share link</button>
           {me.signedIn && currentDbManual && (
             publicSlug ? (
               <>
-                <button onClick={() => copyPublicLink(publicSlug)}><IconGlobe size={15} /> Public link</button>
+                <button className="primary" onClick={() => copyPublicLink(publicSlug)}>Copy public link</button>
                 <button onClick={unpublishManual}>Unpublish</button>
               </>
             ) : (
-              <button onClick={publishManual} title="Create a public web page for this manual">
-                <IconGlobe size={15} /> Publish page
+              <button className="primary" onClick={publishManual} title="Publish this manual to the public library so anyone can find it">
+                Complete manual
               </button>
             )
           )}
+          <button onClick={savePdf}>Save as PDF</button>
+          <button onClick={makeCard} disabled={busyCard}>Quick-start card</button>
+          <button onClick={copyManual}>Copy</button>
+          <button onClick={shareManual}>Share link</button>
+        </div>
+      )}
+
+      {videos.length > 0 && metaClosed && (
+        <div className="videos no-print">
+          <h2>Watch it done</h2>
+          <div className="vidgrid">
+            {videos.slice(0, 4).map((v) => (
+              <a key={v.id} className="vid" href={'https://www.youtube.com/watch?v=' + v.id} target="_blank" rel="noreferrer">
+                <img src={'https://i.ytimg.com/vi/' + v.id + '/mqdefault.jpg'} alt={v.title} loading="lazy" />
+                <span>{v.title}</span>
+              </a>
+            ))}
+          </div>
         </div>
       )}
 
@@ -807,7 +863,7 @@ export default function Home() {
 
       {showResult && !running && me.signedIn && currentManualId && (
         <div className="reminders no-print">
-          <h2><IconBell size={15} /> Maintenance reminders</h2>
+          <h2>Maintenance reminders</h2>
           {currentReminders.map((r) => (
             <div key={r.id} className="rem-item">
               <span className="rem-label">{r.label}</span>
@@ -817,7 +873,7 @@ export default function Home() {
                 <span className="rem-when">every {r.interval_days}d · next {r.next_due}</span>
               )}
               <button className="rem-btn" onClick={() => reminderDone(r.id)}>Done</button>
-              <button className="rem-btn" onClick={() => reminderDelete(r.id)} aria-label="delete reminder"><IconX size={13} /></button>
+              <button className="rem-btn" onClick={() => reminderDelete(r.id)} aria-label="delete reminder">Remove</button>
             </div>
           ))}
           <div className="rem-add">
@@ -835,14 +891,14 @@ export default function Home() {
               <option value="365">Yearly</option>
             </select>
             <button className="rem-btn" onClick={() => addReminder(remLabel, parseInt(remInterval, 10))}>Add</button>
-            <button className="rem-btn" onClick={suggestReminders}><IconSparkles size={13} /> Suggest</button>
+            <button className="rem-btn" onClick={suggestReminders}>Suggest for me</button>
           </div>
         </div>
       )}
 
       {showResult && !running && (
         <div className="chat no-print">
-          <h2><IconMessage size={15} /> Ask a follow-up</h2>
+          <h2>Ask a follow-up</h2>
           {chat.length > 0 && (
             <div className="msgs">
               {chat.map((m, i) => (
@@ -881,11 +937,11 @@ export default function Home() {
             return (
               <span key={s.id} className={'spacechip wrap2' + (activeSpace === s.id ? ' active' : '')}>
                 <button className="sc-main" onClick={() => setActiveSpace(s.id)}>{s.name} ({c})</button>
-                <button className="sc-del" onClick={() => deleteSpace(s.id)} aria-label="delete space"><IconX size={13} /></button>
+                <button className="sc-del" onClick={() => deleteSpace(s.id)} aria-label="delete space">×</button>
               </span>
             );
           })}
-          <button className="spacechip add" onClick={createSpace}><IconPlus size={13} />&nbsp;New space</button>
+          <button className="spacechip add" onClick={createSpace}>+ New space</button>
         </div>
       )}
 
@@ -901,7 +957,7 @@ export default function Home() {
             {library.map((h) => (
               <div key={h.id} className="hitem">
                 <button className="hmain" onClick={() => loadItem(h)}>
-                  <span className="htype"><TypeIcon type={h.type} /></span>
+                  <span className={'htype' + (h.type === 'official' ? ' official' : '')}>{typeLabel(h.type)}</span>
                   <span className="htitle">{h.title}</span>
                 </button>
                 {me.signedIn && spaces.length > 0 && (
@@ -917,7 +973,7 @@ export default function Home() {
                     ))}
                   </select>
                 )}
-                <button className="hdel" onClick={() => deleteItem(h)} aria-label="delete"><IconX size={14} /></button>
+                <button className="hdel" onClick={() => deleteItem(h)} aria-label="delete">×</button>
               </div>
             ))}
           </div>
@@ -927,108 +983,91 @@ export default function Home() {
       {!me.signedIn && idle && (
         <>
           <div className="trust no-print">
-            <span><IconShieldCheck size={16} /> Official manuals first</span>
-            <span><IconMessage size={16} /> Real fixes from real people</span>
-            <span><IconLink size={16} /> Every step sourced</span>
+            <span>Official manuals first</span>
+            <span>Real fixes from Reddit</span>
+            <span>The right videos</span>
+            <span>Every step sourced</span>
           </div>
 
           <div className="section no-print">
-            <div className="kicker">How it works</div>
-            <h2 className="big">From “what is this thing” to fixed, in one search</h2>
+            <div className="kicker">Why it exists</div>
+            <h2 className="big">You already search like this.</h2>
             <p className="sub">
-              ManualMind runs a three-stage pipeline on every request, and you watch it happen live.
+              You type your question, then add &ldquo;reddit&rdquo; — because that&apos;s where the real answers
+              are. You open three tabs and a YouTube video to cook one thing. ManualMind does all of
+              that in one search, and hands you a finished manual.
             </p>
             <div className="howgrid">
               <div className="howcard">
-                <span className="step">01</span>
-                <span className="icon"><IconCamera size={20} /></span>
-                <h3>Tell it anything</h3>
+                <span className="step">1</span>
+                <h3>Ask it anything</h3>
                 <p>
-                  A product name, an error code, a weird noise, a task you&apos;ve never done. Or upload a
-                  photo — it reads brands, model plates, and even the error on the screen.
+                  A product name, an error code, a weird noise. Or upload a photo or the PDF you
+                  already have — it reads model plates and error screens.
                 </p>
               </div>
               <div className="howcard">
-                <span className="step">02</span>
-                <span className="icon"><IconShieldCheck size={20} /></span>
-                <h3>It hunts the official manual</h3>
+                <span className="step">2</span>
+                <h3>It checks every real source</h3>
                 <p>
-                  Before writing a word, it searches the manufacturer&apos;s own documentation. If the
-                  real manual exists, you get it — linked, with a direct source.
+                  The manufacturer&apos;s official docs first. Then Reddit threads from people who
+                  actually fixed it. Then the web and YouTube — so fake how-to sites never make the cut.
                 </p>
               </div>
               <div className="howcard">
-                <span className="step">03</span>
-                <span className="icon"><IconSparkles size={20} /></span>
-                <h3>Or writes a better one</h3>
+                <span className="step">3</span>
+                <h3>You get a finished manual</h3>
                 <p>
-                  No manual? It builds one in front of you — step-by-step, with tips, common mistakes,
-                  and troubleshooting pulled from real Reddit threads and the web. Every source cited.
+                  Step-by-step, with tips, common mistakes, troubleshooting, videos worth watching,
+                  and every source cited. Then ask it follow-ups like a person.
                 </p>
               </div>
             </div>
           </div>
 
           <div className="section no-print">
-            <div className="kicker">Everything after the manual</div>
-            <h2 className="big">Built to run your whole household</h2>
+            <div className="kicker">The library</div>
+            <h2 className="big">Every completed manual makes the next search better.</h2>
             <p className="sub">
-              Manuals are just the start. ManualMind becomes the operating guide for everything you own.
+              When you complete a manual, it joins a public, searchable library — so the next person
+              with your exact problem gets the answer instantly. Google finds it. You built it.
             </p>
             <div className="featgrid">
               <div className="featcard">
-                <span className="icon"><IconFolder size={17} /></span>
-                <div>
-                  <h3>Library &amp; Spaces</h3>
-                  <p>Every manual saved and grouped by place — My Home, The Shop, Unit 4B.</p>
-                </div>
+                <h3>Library &amp; Spaces</h3>
+                <p>Every manual saved and grouped by place — My Home, The Shop, Unit 4B.</p>
               </div>
               <div className="featcard">
-                <span className="icon"><IconMessage size={17} /></span>
-                <div>
-                  <h3>Ask follow-ups</h3>
-                  <p>Stuck on step 3? Every manual has its own chat that knows the context.</p>
-                </div>
+                <h3>Ask follow-ups</h3>
+                <p>Stuck on step 3? Every manual has its own chat that knows the context.</p>
               </div>
               <div className="featcard">
-                <span className="icon"><IconBell size={17} /></span>
-                <div>
-                  <h3>Maintenance reminders</h3>
-                  <p>Filter changes, oil, batteries — on schedule, with AI-suggested intervals.</p>
-                </div>
+                <h3>Maintenance reminders</h3>
+                <p>Filter changes, oil, batteries — on schedule, with suggested intervals.</p>
               </div>
               <div className="featcard">
-                <span className="icon"><IconZap size={17} /></span>
-                <div>
-                  <h3>Quick-start cards</h3>
-                  <p>Any manual boiled down to one printable page. Tape it to the machine.</p>
-                </div>
+                <h3>Quick-start cards</h3>
+                <p>Any manual boiled down to one printable page. Tape it to the machine.</p>
               </div>
               <div className="featcard">
-                <span className="icon"><IconDownload size={17} /></span>
-                <div>
-                  <h3>PDF &amp; share</h3>
-                  <p>Save as PDF or send a link. Your fix becomes someone else&apos;s fix.</p>
-                </div>
+                <h3>PDF &amp; share</h3>
+                <p>Save as PDF or send a link. Your fix becomes someone else&apos;s fix.</p>
               </div>
               <div className="featcard">
-                <span className="icon"><IconGlobe size={17} /></span>
-                <div>
-                  <h3>Publish to the web</h3>
-                  <p>Turn any manual into a public page with its own link — searchable by anyone.</p>
-                </div>
+                <h3>Complete &amp; publish</h3>
+                <p>One click turns your manual into a public page anyone can find.</p>
               </div>
             </div>
           </div>
 
           <div className="ctaband no-print">
-            <h2>Lost the manual? Never again.</h2>
+            <h2>Stop searching. Start knowing.</h2>
             <p>
               Three free manuals a day, no account needed. Sign up free for a cloud library, spaces,
               chat, and reminders.
             </p>
             <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
-              Get your first manual <IconArrowRight size={16} />
+              Get your first manual
             </button>
           </div>
         </>

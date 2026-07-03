@@ -4,7 +4,6 @@ import { cache } from 'react';
 import { marked } from 'marked';
 import { createClient } from '@supabase/supabase-js';
 import { siteUrl } from '@/lib/site';
-import { IconBook, TypeIcon } from '../../icons';
 
 export const revalidate = 300;
 
@@ -92,13 +91,12 @@ export default async function PublicManualPage({ params }: { params: { slug: str
   return (
     <div className="wrap">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <a className="pub-brand no-print" href="/">
-        <span className="logo" style={{ width: 30, height: 30, borderRadius: 9 }}><IconBook size={15} /></span>
-        ManualMind
-      </a>
+      <a className="pub-brand no-print" href="/">ManualMind</a>
 
       <div className={'banner ' + type}>
-        <span className="ico"><TypeIcon type={type} size={17} /></span>
+        <span className="tag">
+          {type === 'official' ? 'Official' : type === 'community' ? 'Community' : 'AI-built'}
+        </span>
         <div>
           <h3>{bannerTitle}</h3>
           {manual.official_manual ? (

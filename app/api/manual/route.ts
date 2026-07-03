@@ -42,6 +42,39 @@ async function fetchReddit(query: string): Promise<RedditPost[]> {
   }
 }
 
+type Video = { id: string; title: string };
+
+// Scrapes YouTube's search results page (no API key needed).
+async function fetchYouTube(query: string): Promise<Video[]> {
+  try {
+    const url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query);
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+        'Accept-Language': 'en-US,en;q=0.9',
+      },
+      cache: 'no-store',
+    });
+    if (!res.ok) return [];
+    const html = (await res.text()).slice(0, 900_000);
+    const out: Video[] = [];
+    const seen = new Set<string>();
+    const re = /"videoRenderer":\{"videoId":"([\w-]{11})"[\s\S]{0,2000}?"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(html)) && out.length < 6) {
+      if (seen.has(m[1])) continue;
+      seen.add(m[1]);
+      try {
+        out.push({ id: m[1], title: JSON.parse('"' + m[2] + '"') });
+      } catch {}
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
 function parseDataUrl(image: string): { mediaType: string; data: string } | null {
   if (!image.startsWith('data:')) return null;
   const semi = image.indexOf(';');
@@ -53,34 +86,30 @@ function parseDataUrl(image: string): { mediaType: string; data: string } | null
   return { mediaType, data };
 }
 
-async function identifyImage(client: Anthropic, image: string, hint: string): Promise<string> {
-  const parsed = parseDataUrl(image);
-  if (!parsed) return hint;
+async function identifyUpload(
+  client: Anthropic,
+  parsed: { mediaType: string; data: string },
+  hint: string,
+): Promise<string> {
+  const isPdf = parsed.mediaType === 'application/pdf';
   const hintText = hint ? ('User hint: ' + hint + '. ') : '';
+  const block: any = isPdf
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: parsed.data } }
+    : { type: 'image', source: { type: 'base64', media_type: parsed.mediaType as any, data: parsed.data } };
+  const question = isPdf
+    ? 'Identify what product or subject this document covers, as specifically as possible (brand, model, type). ' +
+      hintText +
+      'Reply with ONLY the identification, nothing else.'
+    : 'Identify the product or object in this image as specifically as possible (brand, model, and type). ' +
+      hintText +
+      'Read any visible model number, spec label, or rating plate to pin down the exact model. ' +
+      'If the device is showing an error code or display message, include it. ' +
+      'Reply with ONLY the identification, e.g. "Sony WH-1000XM4 headphones" or ' +
+      '"Samsung WF45T6000AW washer displaying error code 4C", nothing else.';
   const msg = await client.messages.create({
     model: MODEL,
     max_tokens: 200,
-    messages: [
-      {
-        role: 'user',
-        content: [
-          {
-            type: 'image',
-            source: { type: 'base64', media_type: parsed.mediaType as any, data: parsed.data },
-          },
-          {
-            type: 'text',
-            text:
-              'Identify the product or object in this image as specifically as possible (brand, model, and type). ' +
-              hintText +
-              'Read any visible model number, spec label, or rating plate to pin down the exact model. ' +
-              'If the device is showing an error code or display message, include it. ' +
-              'Reply with ONLY the identification, e.g. "Sony WH-1000XM4 headphones" or ' +
-              '"Samsung WF45T6000AW washer displaying error code 4C", nothing else.',
-          },
-        ],
-      },
-    ],
+    messages: [{ role: 'user', content: [block, { type: 'text', text: question }] }],
   });
   return (
     msg.content
@@ -208,16 +237,23 @@ export async function POST(req: Request) {
 
         const client = new Anthropic({ apiKey });
 
+        const parsedUpload = image ? parseDataUrl(image) : null;
+        const isPdf = parsedUpload?.mediaType === 'application/pdf';
+
         let subject = query;
-        if (image) {
+        if (parsedUpload) {
           send({ stage: 'identify' });
-          subject = await identifyImage(client, image, query);
+          subject = await identifyUpload(client, parsedUpload, query);
           send({ stage: 'identified', product: subject });
         }
 
         send({ stage: 'reddit' });
         const reddit = await fetchReddit(subject);
         send({ stage: 'reddit_done', count: reddit.length });
+
+        send({ stage: 'youtube' });
+        const videos = await fetchYouTube(subject + ' how to');
+        send({ stage: 'youtube_done', videos: videos.slice(0, 4) });
 
         const redditContext =
           reddit.length > 0
@@ -234,18 +270,41 @@ export async function POST(req: Request) {
         const system =
           'You are ManualMind, an expert technical-manual engine. Produce the single most useful manual for the item the user needs help with.';
 
+        const youtubeContext =
+          videos.length > 0
+            ? videos
+                .map((v, i) => '[' + (i + 1) + '] ' + v.title + ' — https://www.youtube.com/watch?v=' + v.id)
+                .join('\n')
+            : '(no YouTube videos found)';
+
         const userPrompt =
           'The user needs a manual or guide for: "' + subject + '".\n\n' +
           'Reddit community discussions found (real-world tips, gotchas, fixes — cite the most useful):\n' +
           redditContext +
+          '\n\nYouTube tutorials found:\n' +
+          youtubeContext +
           '\n\nInstructions:\n' +
           '1. Use web_search to find the OFFICIAL manufacturer manual, user guide, datasheet, or PDF for this item if one plausibly exists. Search smartly (model number + "manual" / "user guide" / "pdf").\n' +
           '2. Begin your reply with ONE fenced code block tagged meta containing minified JSON: {"product":"<best name>","officialManual":"<direct URL or empty>","type":"official|community|synthesized","confidence":"high|medium|low"}.\n' +
-          '3. After the meta block, write a clear Markdown manual: a one-line summary, then sections like Overview, What You Need, Step-by-Step, Tips & Common Mistakes, Troubleshooting, and Safety if relevant. Be specific and practical.\n' +
-          '4. End with a "## Sources" section listing every official link and Reddit thread you used, as markdown links.\n\n' +
+          '3. After the meta block, write a clear Markdown manual: a one-line summary, then sections like Overview, What You Need, Step-by-Step, Tips & Common Mistakes, Troubleshooting, and Safety if relevant. Be specific and practical. Where a step is much easier to follow on video, reference the most relevant YouTube tutorial inline as a markdown link.\n' +
+          '4. End with a "## Sources" section listing every official link, Reddit thread, and YouTube video you used, as markdown links.\n\n' +
+          (isPdf
+            ? 'IMPORTANT: The user attached a PDF document (shown above the instructions). Base the manual primarily on that document — treat it as the authoritative source — and use Reddit/web/YouTube only to fill gaps with real-world tips.\n\n'
+            : '') +
           'Prefer verified facts from the official manual over guesses.';
 
         send({ stage: 'generate' });
+
+        const userContent: any =
+          isPdf && parsedUpload
+            ? [
+                {
+                  type: 'document',
+                  source: { type: 'base64', media_type: 'application/pdf', data: parsedUpload.data },
+                },
+                { type: 'text', text: userPrompt },
+              ]
+            : userPrompt;
 
         let full = '';
         const msgStream = client.messages.stream({
@@ -253,7 +312,7 @@ export async function POST(req: Request) {
           max_tokens: 4096,
           system,
           tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any],
-          messages: [{ role: 'user', content: userPrompt }],
+          messages: [{ role: 'user', content: userContent }],
         });
 
         for await (const event of msgStream) {
