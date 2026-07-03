@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   appleWebApp: { capable: true, title: 'ManualMind', statusBarStyle: 'black-translucent' },
   icons: { icon: '/icon.svg', apple: '/icon.svg', shortcut: '/icon.svg' },
   // Site ships its own deliberate light design; tells Dark Reader not to repaint it.
-  other: { 'darkreader-lock': '' },
+  other: { 'darkreader-lock': 'true' },
 };
 
 export const viewport: Viewport = {
