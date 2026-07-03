@@ -86,9 +86,19 @@ const FAQS: { q: string; a: string }[] = [
     q: 'Does it work on my phone?',
     a: 'Yes. The site installs as an app on iPhone and Android — open it in your browser and choose "Add to Home Screen."',
   },
+  {
+    q: 'How does the YouTube part work?',
+    a: 'For every manual, ManualMind finds real tutorial videos for the same task and shows the best ones under your manual — because some steps are just easier to watch. The AI also references the most relevant video inline.',
+  },
+  {
+    q: 'Can I unpublish a manual?',
+    a: 'Any time. Your manuals are private by default — publishing is a deliberate click, and Unpublish takes the page down immediately. Nothing is published without you choosing it.',
+  },
 ];
 
 const HISTORY_KEY = 'mm_history_v1';
+const RECENT_KEY = 'mm_recent_v1';
+const SPACE_KEY = 'mm_space_v1';
 const hasAuth =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL && !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -179,6 +189,14 @@ export default function Home() {
   const abortRef = useRef<AbortController | null>(null);
   const [lastRun, setLastRun] = useState<string | null>(null);
   const [phIdx, setPhIdx] = useState(0);
+  const [recent, setRecent] = useState<string[]>([]);
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [libSearched, setLibSearched] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [busyPublish, setBusyPublish] = useState(false);
+  const [buildSeconds, setBuildSeconds] = useState<number | null>(null);
+  const searchAbort = useRef<AbortController | null>(null);
+  const msgsRef = useRef<HTMLDivElement>(null);
   const [supabase] = useState(() => (hasAuth ? createClient() : null));
 
   // Rotate the search placeholder while the field is empty.
@@ -221,6 +239,10 @@ export default function Home() {
     try {
       const stored = localStorage.getItem(HISTORY_KEY);
       if (stored) setHistory(JSON.parse(stored));
+      const rec = localStorage.getItem(RECENT_KEY);
+      if (rec) setRecent(JSON.parse(rec));
+      const sp = localStorage.getItem(SPACE_KEY);
+      if (sp) setTargetSpace(sp);
     } catch {}
     if (typeof window !== 'undefined' && window.location.hash.startsWith('#m=')) {
       const decoded = decodeShare(window.location.hash.slice(3));
@@ -233,6 +255,15 @@ export default function Home() {
     if (typeof window !== 'undefined' && window.location.search.includes('upgraded=1')) {
       flash('Welcome to Pro! Unlimited manuals unlocked.');
       window.history.replaceState(null, '', '/');
+    }
+    // Support /?q=… deep links (search engines' sitelinks box, shared searches).
+    if (typeof window !== 'undefined') {
+      const qp = new URLSearchParams(window.location.search).get('q');
+      if (qp) {
+        setQuery(qp.slice(0, 500));
+        window.history.replaceState(null, '', '/');
+        setTimeout(() => searchRef.current?.focus(), 200);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -286,19 +317,65 @@ export default function Home() {
     const q = query.trim();
     if (!hasAuth || q.length < 3 || running) {
       setLibHits([]);
+      setLibSearched(false);
       return;
     }
     const t = setTimeout(async () => {
+      searchAbort.current?.abort();
+      const controller = new AbortController();
+      searchAbort.current = controller;
       try {
-        const res = await fetch('/api/search?q=' + encodeURIComponent(q));
+        const res = await fetch('/api/search?q=' + encodeURIComponent(q), { signal: controller.signal });
         const data = await res.json();
         setLibHits(data.results || []);
+        setLibSearched(true);
       } catch {
-        setLibHits([]);
+        if (!controller.signal.aborted) {
+          setLibHits([]);
+          setLibSearched(false);
+        }
       }
-    }, 300);
+    }, 250);
     return () => clearTimeout(t);
   }, [query, running]);
+
+  // Warn before closing the tab mid-generation.
+  useEffect(() => {
+    if (!running) return;
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [running]);
+
+  // The browser tab (and any saved PDF) takes the manual's name while viewing it.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (currentTitle && body) document.title = currentTitle + ' — ManualMind';
+    else document.title = 'ManualMind — the manual for anything';
+  }, [currentTitle, body]);
+
+  // Keep the follow-up chat scrolled to the newest message.
+  useEffect(() => {
+    const el = msgsRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [chat]);
+
+  function rememberSearch(text: string) {
+    if (!text) return;
+    setRecent((prev) => {
+      const next = [text, ...prev.filter((r) => r !== text)].slice(0, 5);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  }
+
+  function clearRecent() {
+    setRecent([]);
+    try { localStorage.removeItem(RECENT_KEY); } catch {}
+  }
 
   function saveLocal(finalRaw: string) {
     const parsed = splitMeta(finalRaw);
@@ -360,7 +437,8 @@ export default function Home() {
   }
 
   async function createSpace() {
-    const name = typeof window !== 'undefined' ? window.prompt('Name your space (e.g. "My Home", "Unit 4B", "The Shop")') : '';
+    const raw = typeof window !== 'undefined' ? window.prompt('Name your space (e.g. "My Home", "Unit 4B", "The Shop")') : '';
+    const name = (raw || '').trim().slice(0, 40);
     if (!name) return;
     const res = await fetch('/api/spaces', {
       method: 'POST',
@@ -386,7 +464,28 @@ export default function Home() {
 
   function copyManual() {
     if (!body) return;
-    navigator.clipboard.writeText(body).then(() => flash('Manual copied to clipboard'));
+    navigator.clipboard.writeText(body).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    });
+  }
+
+  function newManual() {
+    setRaw('');
+    setError(null);
+    setLimitHit(false);
+    setIdentified(null);
+    setRedditCount(null);
+    setVideos([]);
+    setCurrentManualId(null);
+    setCurrentTitle('');
+    setChat([]);
+    setQuery('');
+    setImage(null);
+    setFileName(null);
+    if (fileRef.current) fileRef.current.value = '';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setTimeout(() => searchRef.current?.focus(), 300);
   }
   function shareManual() {
     if (!body) return;
@@ -451,7 +550,8 @@ export default function Home() {
   }
 
   async function publishManual() {
-    if (!currentManualId) return;
+    if (!currentManualId || busyPublish) return;
+    setBusyPublish(true);
     try {
       const res = await fetch('/api/publish', {
         method: 'POST',
@@ -473,6 +573,8 @@ export default function Home() {
       loadMe();
     } catch {
       flash('Could not publish.');
+    } finally {
+      setBusyPublish(false);
     }
   }
 
@@ -516,6 +618,10 @@ export default function Home() {
 
   async function addReminder(label: string, interval: number) {
     if (!label.trim() || !currentManualId) return;
+    if (currentReminders.some((r) => r.label.toLowerCase() === label.trim().toLowerCase())) {
+      flash('That reminder already exists for this manual.');
+      return;
+    }
     await fetch('/api/reminders', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -571,6 +677,8 @@ export default function Home() {
     if (!text && !image) return;
     if (q !== undefined) setQuery(q);
     setLastRun(text);
+    rememberSearch(text);
+    setBuildSeconds(null);
     if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
     setRaw('');
     setError(null);
@@ -639,7 +747,10 @@ export default function Home() {
               setRaw((r) => r + (evt.text || ''));
               break;
             case 'saved': setCurrentManualId(evt.id); break;
-            case 'done': markDone('generate'); setActive(null); break;
+            case 'done':
+              markDone('generate'); setActive(null);
+              if (evt.seconds) { setBuildSeconds(evt.seconds); flash('Built in ' + evt.seconds + 's'); }
+              break;
             case 'limit':
               setError(evt.message); setLimitHit(true); setActive(null); break;
             case 'error':
@@ -741,6 +852,11 @@ export default function Home() {
   const manualTitleById = (id: string | null) => dbManuals.find((m) => m.id === id)?.title || 'a manual';
   const currentDbManual = currentManualId ? dbManuals.find((m) => m.id === currentManualId) : undefined;
   const publicSlug = currentDbManual?.public_slug || null;
+  const bodyWords = body ? body.split(/\s+/).filter(Boolean).length : 0;
+  const readMinutes = Math.max(1, Math.round(bodyWords / 220));
+  const sourceCount = body ? (body.match(/\]\(https?:\/\//g) || []).length : 0;
+  const showRecent = searchFocused && !query.trim() && recent.length > 0 && idleSafe();
+  function idleSafe() { return !raw && !running && !error; }
 
   const idle = !raw && !running && !error;
 
@@ -750,6 +866,10 @@ export default function Home() {
         <a className="wordmark" href="/">ManualMind</a>
         {hasAuth && (
           <div className="topbar">
+            <a className="tb navlink" href="/library">Library</a>
+            {showResult && !running && (
+              <button className="tb" onClick={newManual}>New manual</button>
+            )}
             {me.signedIn ? (
               <>
                 <span className={'plan ' + (isPro ? 'pro' : '')}>{isPro ? 'PRO' : 'FREE'}</span>
@@ -771,7 +891,7 @@ export default function Home() {
         )}
       </div>
 
-      <div className="hero no-print">
+      <div className="hero herofade no-print">
         {idle && <div className="herobadge">The answer engine for everything you own.</div>}
         <h1>The manual for anything.</h1>
         <p className="tagline">
@@ -783,18 +903,47 @@ export default function Home() {
 
       <div className="panel no-print">
         <div className="searchrow">
-          <input
-            ref={searchRef}
-            type="text"
-            placeholder={PLACEHOLDERS[phIdx]}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter' && !running) run(); }}
-          />
+          <div className="searchbox">
+            <input
+              ref={searchRef}
+              type="text"
+              placeholder={PLACEHOLDERS[phIdx]}
+              value={query}
+              enterKeyHint="search"
+              autoCapitalize="off"
+              spellCheck={false}
+              maxLength={500}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !running) run();
+                if (e.key === 'Escape') (e.target as HTMLInputElement).blur();
+              }}
+            />
+            {query && (
+              <button className="clearq" aria-label="clear search" onClick={() => { setQuery(''); searchRef.current?.focus(); }}>
+                ×
+              </button>
+            )}
+          </div>
           <button className="go" disabled={running || (!query.trim() && !image)} onClick={() => run()}>
             {running ? 'Working…' : 'Get manual'}
           </button>
         </div>
+        {showRecent && (
+          <div className="recent">
+            <div className="lr-head">Recent searches</div>
+            {recent.map((r) => (
+              <button key={r} className="lr-item" onMouseDown={(e) => { e.preventDefault(); run(r); }}>
+                <span className="lr-title">{r}</span>
+              </button>
+            ))}
+            <button className="lr-item lr-clear" onMouseDown={(e) => { e.preventDefault(); clearRecent(); }}>
+              <span className="lr-sub">Clear recent searches</span>
+            </button>
+          </div>
+        )}
         <div className="tools">
           <label className="upload">
             Upload a photo or PDF
@@ -811,7 +960,14 @@ export default function Home() {
             </button>
           )}
           {me.signedIn && spaces.length > 0 && (
-            <select className="spacesel" value={targetSpace} onChange={(e) => setTargetSpace(e.target.value)}>
+            <select
+              className="spacesel"
+              value={targetSpace}
+              onChange={(e) => {
+                setTargetSpace(e.target.value);
+                try { localStorage.setItem(SPACE_KEY, e.target.value); } catch {}
+              }}
+            >
               <option value="">Save to: no space</option>
               {spaces.map((s) => (
                 <option key={s.id} value={s.id}>Save to: {s.name}</option>
@@ -819,17 +975,44 @@ export default function Home() {
             </select>
           )}
         </div>
+        {idle && (
+          <div className="panelfoot no-print">
+            <span>Free · No sign-up needed · Sources cited</span>
+            <span className="kbdhint">Press / to search</span>
+            <a href="/library">Browse the library</a>
+          </div>
+        )}
       </div>
 
-      {libHits.length > 0 && idle && (
+      {idle && libSearched && query.trim().length >= 3 && (
         <div className="libresults no-print">
           <div className="lr-head">From the manual library</div>
-          {libHits.map((h) => (
-            <a key={h.slug} className="lr-item" href={'/m/' + h.slug}>
-              <div className="lr-title">{h.title}</div>
-              <div className="lr-sub">{typeLabel(h.type)} manual · ready now</div>
-            </a>
-          ))}
+          {libHits.length === 0 ? (
+            <div className="lr-item lr-empty">
+              <div className="lr-sub">No completed manual for this yet — press Get manual and be the first.</div>
+            </div>
+          ) : (
+            libHits.map((h) => {
+              const q = query.trim();
+              const i = h.title.toLowerCase().indexOf(q.toLowerCase());
+              return (
+                <a key={h.slug} className="lr-item" href={'/m/' + h.slug}>
+                  <div className="lr-title">
+                    {i >= 0 ? (
+                      <>
+                        {h.title.slice(0, i)}
+                        <mark>{h.title.slice(i, i + q.length)}</mark>
+                        {h.title.slice(i + q.length)}
+                      </>
+                    ) : (
+                      h.title
+                    )}
+                  </div>
+                  <div className="lr-sub">{typeLabel(h.type)} manual · ready now</div>
+                </a>
+              );
+            })
+          )}
         </div>
       )}
 
@@ -913,7 +1096,11 @@ export default function Home() {
         <div className={'banner ' + bannerClass}>
           <span className="tag">{typeLabel(meta?.type)}</span>
           <div>
-            <h3>{bannerTitle}{meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}</h3>
+            <h3>
+              {bannerTitle}
+              {meta.confidence ? ' · ' + meta.confidence + ' confidence' : ''}
+              {sourceCount > 0 && !running ? ' · ' + sourceCount + ' sources cited' : ''}
+            </h3>
             {meta.officialManual ? (
               <p>Official source: <a href={meta.officialManual} target="_blank" rel="noreferrer">{meta.officialManual}</a></p>
             ) : (
@@ -932,14 +1119,19 @@ export default function Home() {
                 <button onClick={unpublishManual}>Unpublish</button>
               </>
             ) : (
-              <button className="primary" onClick={publishManual} title="Publish this manual to the public library so anyone can find it">
-                Complete manual
+              <button
+                className="primary"
+                disabled={busyPublish}
+                onClick={publishManual}
+                title="Publish this manual to the public library so anyone can find it"
+              >
+                {busyPublish ? 'Publishing…' : 'Complete manual'}
               </button>
             )
           )}
           <button onClick={savePdf}>Save as PDF</button>
-          <button onClick={makeCard} disabled={busyCard}>Quick-start card</button>
-          <button onClick={copyManual}>Copy</button>
+          <button onClick={makeCard} disabled={busyCard}>{busyCard ? 'Building…' : 'Quick-start card'}</button>
+          <button onClick={copyManual}>{copied ? 'Copied' : 'Copy'}</button>
           <button onClick={shareManual}>Share link</button>
         </div>
       )}
@@ -956,6 +1148,13 @@ export default function Home() {
             ))}
           </div>
         </div>
+      )}
+
+      {showResult && !running && (
+        <p className="pub-meta no-print">
+          {readMinutes} min read · {bodyWords.toLocaleString()} words
+          {buildSeconds ? ' · built in ' + buildSeconds + 's' : ''}
+        </p>
       )}
 
       {body && (
@@ -989,6 +1188,7 @@ export default function Home() {
               onKeyDown={(e) => { if (e.key === 'Enter') addReminder(remLabel, parseInt(remInterval, 10)); }}
             />
             <select value={remInterval} onChange={(e) => setRemInterval(e.target.value)}>
+              <option value="14">Every 2 weeks</option>
               <option value="30">Monthly</option>
               <option value="90">Every 3 months</option>
               <option value="180">Every 6 months</option>
@@ -1004,11 +1204,15 @@ export default function Home() {
         <div className="chat no-print">
           <h2>Ask a follow-up</h2>
           {chat.length > 0 && (
-            <div className="msgs">
+            <div className="msgs" ref={msgsRef}>
               {chat.map((m, i) => (
                 <div key={i} className={'msg ' + m.role}>
                   {m.role === 'assistant' ? (
-                    <div dangerouslySetInnerHTML={{ __html: marked.parse(m.content || '…') as string }} />
+                    m.content ? (
+                      <div dangerouslySetInnerHTML={{ __html: marked.parse(m.content) as string }} />
+                    ) : (
+                      <span className="thinking">Thinking…</span>
+                    )
                   ) : (
                     <span>{m.content}</span>
                   )}
@@ -1021,6 +1225,7 @@ export default function Home() {
               type="text"
               placeholder="e.g. It's still beeping after step 3 — what now?"
               value={chatInput}
+              maxLength={1000}
               onChange={(e) => setChatInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); }}
             />
@@ -1061,7 +1266,11 @@ export default function Home() {
 
       {library.length > 0 && (
         <div className="history no-print">
-          <h2>{me.signedIn ? (activeSpace ? spaceName(activeSpace) : 'Your library') : 'Recent (saved on this device)'}</h2>
+          <h2>
+            {me.signedIn
+              ? (activeSpace ? spaceName(activeSpace) : 'Your library') + ' (' + library.length + ')'
+              : 'Recent (saved on this device)'}
+          </h2>
           {!me.signedIn && hasAuth && (
             <p className="hnote">
               <a href="/login">Sign in</a> to save your library to the cloud, group it into spaces, add maintenance reminders, and chat with any manual.
@@ -1135,6 +1344,56 @@ export default function Home() {
                   Step-by-step, with tips, common mistakes, troubleshooting, videos worth watching,
                   and every source cited. Then ask it follow-ups like a person.
                 </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="section no-print">
+            <div className="kicker">Who it&apos;s for</div>
+            <h2 className="big">One tool, every &ldquo;how do I…&rdquo;</h2>
+            <div className="featgrid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
+              <div className="featcard">
+                <h3>Homeowners</h3>
+                <p>The furnace filter, the water heater&apos;s pilot light, the breaker that keeps tripping, the sprinkler timer nobody remembers programming.</p>
+              </div>
+              <div className="featcard">
+                <h3>Renters</h3>
+                <p>Appliances you didn&apos;t choose and can&apos;t replace. Get the manual for the mystery thermostat before you touch it.</p>
+              </div>
+              <div className="featcard">
+                <h3>Makers &amp; tinkerers</h3>
+                <p>Flash the firmware, calibrate the printer, install RetroArch, host a local LLM — the stuff where Reddit is the only real documentation.</p>
+              </div>
+              <div className="featcard">
+                <h3>Kitchens &amp; shops</h3>
+                <p>Every machine on the line with its own quick-start card taped to it, and maintenance reminders that actually fire.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="section no-print">
+            <div className="kicker">The difference</div>
+            <h2 className="big">Googling it vs. ManualMind</h2>
+            <div className="compare">
+              <div className="comparecol">
+                <h3>Googling it</h3>
+                <ul>
+                  <li>Ten tabs, three of them fake how-to sites</li>
+                  <li>An SEO article that never answers the question</li>
+                  <li>A 40-minute video for a 2-minute fix</li>
+                  <li>The answer buried in a Reddit comment from 2019</li>
+                  <li>Start over next time it breaks</li>
+                </ul>
+              </div>
+              <div className="comparecol mm">
+                <h3>ManualMind</h3>
+                <ul>
+                  <li>One search, official docs checked first</li>
+                  <li>A finished, step-by-step manual in about a minute</li>
+                  <li>The best Reddit fixes and videos, already filtered</li>
+                  <li>Every claim linked to its source</li>
+                  <li>Saved forever, with reminders and follow-up chat</li>
+                </ul>
               </div>
             </div>
           </div>
@@ -1242,12 +1501,60 @@ export default function Home() {
             <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}>
               Get your first manual
             </button>
+            <div className="ctasub">
+              or <a href="/library">browse the completed-manual library</a>
+            </div>
           </div>
+
+          <script
+            type="application/ld+json"
+            dangerouslySetInnerHTML={{
+              __html: JSON.stringify([
+                {
+                  '@context': 'https://schema.org',
+                  '@type': 'WebSite',
+                  name: 'ManualMind',
+                  url: typeof window === 'undefined' ? 'https://manualmind-six.vercel.app' : window.location.origin,
+                  potentialAction: {
+                    '@type': 'SearchAction',
+                    target: { '@type': 'EntryPoint', urlTemplate: (typeof window === 'undefined' ? 'https://manualmind-six.vercel.app' : window.location.origin) + '/?q={search_term_string}' },
+                    'query-input': 'required name=search_term_string',
+                  },
+                },
+                {
+                  '@context': 'https://schema.org',
+                  '@type': 'Organization',
+                  name: 'ManualMind',
+                  url: typeof window === 'undefined' ? 'https://manualmind-six.vercel.app' : window.location.origin,
+                  description: 'The answer engine for everything you own — finds the official manual or builds a better one, with every source cited.',
+                },
+              ]),
+            }}
+          />
         </>
       )}
 
-      <div className="footer no-print">
-        ManualMind · finds the real manual first, builds one when it can’t · powered by Claude
+      <div className="bigfooter no-print">
+        <div className="bfgrid">
+          <div className="bfcol">
+            <div className="bfbrand">ManualMind</div>
+            <p>Finds the real manual first. Builds a better one when it can&apos;t. Powered by Claude.</p>
+          </div>
+          <div className="bfcol">
+            <h4>Product</h4>
+            <a href="/">Get a manual</a>
+            <a href="/library">The library</a>
+            {hasAuth && <a href="/login">Sign in</a>}
+          </div>
+          <div className="bfcol">
+            <h4>Good to know</h4>
+            <a href="/#faq" onClick={(e) => { e.preventDefault(); document.querySelector('.faq')?.scrollIntoView({ behavior: 'smooth' }); }}>FAQ</a>
+            <a href="/sitemap.xml">Sitemap</a>
+          </div>
+        </div>
+        <div className="footer" style={{ marginTop: 28 }}>
+          ManualMind · verify safety-critical steps against official sources
+        </div>
       </div>
 
       {toast && <div className="toast no-print">{toast}</div>}

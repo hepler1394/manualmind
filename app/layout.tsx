@@ -14,6 +14,13 @@ export const metadata: Metadata = {
   applicationName: 'ManualMind',
   appleWebApp: { capable: true, title: 'ManualMind', statusBarStyle: 'black-translucent' },
   icons: { icon: '/icon.svg', apple: '/icon.svg', shortcut: '/icon.svg' },
+  keywords: [
+    'manual', 'user guide', 'instructions', 'how to', 'fix', 'troubleshooting',
+    'error code', 'official manual', 'AI manual generator',
+  ],
+  authors: [{ name: 'ManualMind' }],
+  creator: 'ManualMind',
+  formatDetection: { telephone: false },
   // Site ships its own deliberate light design; tells Dark Reader not to repaint it.
   other: { 'darkreader-lock': 'true' },
 };

@@ -2,12 +2,15 @@ import type { MetadataRoute } from 'next';
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: 'ManualMind — a manual for anything',
+    name: 'ManualMind — the manual for anything',
     short_name: 'ManualMind',
     description:
-      'Find the official manual for anything, or build one in real time from Reddit and the web.',
+      'Find the official manual for anything — or get a better one built live from Reddit, the web, and YouTube.',
     start_url: '/',
     display: 'standalone',
+    display_override: ['standalone', 'minimal-ui'],
+    categories: ['utilities', 'productivity', 'education'],
+    lang: 'en',
     background_color: '#f5f5f7',
     theme_color: '#f5f5f7',
     icons: [

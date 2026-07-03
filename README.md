@@ -1,12 +1,14 @@
 # ManualMind
 
-**AI that finds — or builds — a manual for anything.**
+**The answer engine for everything you own.** Live at [manualmind-six.vercel.app](https://manualmind-six.vercel.app).
 
-Type any product, problem, or task (or upload a photo) and ManualMind runs a tiered pipeline:
+Type any product, problem, or error code — or upload a photo or PDF — and ManualMind runs a tiered pipeline:
 
-1. **Identify** — if you upload a photo, Claude vision names the exact product/model.
+1. **Identify** — Claude vision names the exact product/model from a photo (including model plates and on-screen error codes); PDFs are treated as the authoritative source document.
 2. **Find first** — it web-searches for the *official* manufacturer manual/PDF. If one exists, you get the real thing, linked.
-3. **Synthesize** — when none exists, it pulls real Reddit threads + web results and builds a clean, step-by-step manual in real time, with sources cited.
+3. **Synthesize** — when none exists, it pulls real Reddit threads, web results, and YouTube tutorials and builds a clean, step-by-step manual in real time, with every source cited.
+
+Completed manuals can be **published to a public, searchable library** (`/library`, `/m/<slug>`) with full SEO treatment — sitemap, OG cards, JSON-LD — so each one becomes a Google-indexable answer page. The design follows an Apple-style system: fog/snow/ink palette, one azure CTA color, no icons, no shadows.
 
 Extras: photo upload (reads model numbers and on-screen error codes), streamed output, Save-as-PDF, **quick-start cards** (1-page printable), shareable links, **public SEO manual pages** (publish any saved manual to `/m/<slug>`, with sitemap + JSON-LD), a saved manual **library**, **Spaces** (group by home / property / shop), per-manual **follow-up chat**, and **maintenance reminders** with AI suggestions. Accounts + billing make it a subscription product.
 

@@ -55,13 +55,34 @@ async function getRelated(slug: string): Promise<{ slug: string; title: string }
       .not('public_slug', 'is', null)
       .neq('public_slug', slug)
       .order('published_at', { ascending: false })
-      .limit(3);
-    return (data || [])
-      .filter((r: any) => r.public_slug)
-      .map((r: any) => ({ slug: r.public_slug, title: r.title }));
+      .limit(8);
+    const seen = new Set<string>();
+    const out: { slug: string; title: string }[] = [];
+    for (const r of data || []) {
+      if (!r.public_slug || seen.has(r.title)) continue;
+      seen.add(r.title);
+      out.push({ slug: r.public_slug, title: r.title });
+      if (out.length === 4) break;
+    }
+    return out;
   } catch {
     return [];
   }
+}
+
+function readStats(md: string): { words: number; minutes: number } {
+  const words = md.replace(/```[\s\S]*?```/g, ' ').split(/\s+/).filter(Boolean).length;
+  return { words, minutes: Math.max(1, Math.round(words / 220)) };
+}
+
+function extractToc(md: string): { id: string; text: string }[] {
+  const out: { id: string; text: string }[] = [];
+  for (const m of md.matchAll(/^##\s+(.+)$/gm)) {
+    const text = m[1].trim();
+    const id = text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    if (id) out.push({ id, text });
+  }
+  return out;
 }
 
 function plainDescription(md: string): string {
@@ -84,8 +105,17 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     title,
     description,
     alternates: { canonical: url },
-    openGraph: { title, description, url, siteName: 'ManualMind', type: 'article' },
-    twitter: { card: 'summary', title, description },
+    // Thin manuals stay out of the index so the library's search quality stays high.
+    robots: manual.body.length < 400 ? { index: false } : undefined,
+    openGraph: {
+      title,
+      description,
+      url,
+      siteName: 'ManualMind',
+      type: 'article',
+      publishedTime: manual.published_at || undefined,
+    },
+    twitter: { card: 'summary_large_image', title, description },
   };
 }
 
@@ -94,13 +124,21 @@ export default async function PublicManualPage({ params }: { params: { slug: str
   if (!manual) notFound();
   const related = await getRelated(params.slug);
   const publishedDate = (manual.published_at || manual.created_at || '').slice(0, 10);
+  const stats = readStats(manual.body);
+  const toc = extractToc(manual.body);
 
   const type = manual.type || 'synthesized';
   const bannerTitle =
     type === 'official' ? 'Official manual found'
       : type === 'community' ? 'Built from community knowledge'
       : 'Manual synthesized by AI';
-  const html = marked.parse(manual.body) as string;
+  // Give h2s stable ids so the table of contents can deep-link into the manual.
+  const slugifyHeading = (t: string) =>
+    t.replace(/&[a-z#0-9]+;/gi, ' ').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const html = (marked.parse(manual.body) as string).replace(
+    /<h2>([^<]+)<\/h2>/g,
+    (_all, text) => '<h2 id="' + slugifyHeading(text) + '">' + text + '</h2>',
+  );
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -145,13 +183,30 @@ export default async function PublicManualPage({ params }: { params: { slug: str
         </div>
       </div>
 
-      {publishedDate && (
-        <p className="pub-meta no-print">Published {publishedDate} · From the ManualMind library</p>
+      <p className="pub-meta no-print">
+        {publishedDate ? 'Published ' + publishedDate + ' · ' : ''}
+        {stats.minutes} min read · {stats.words.toLocaleString()} words · From the ManualMind library
+      </p>
+
+      {toc.length > 1 && (
+        <nav className="toc no-print" aria-label="Contents">
+          <h2>On this page</h2>
+          {toc.map((t) => (
+            <a key={t.id} href={'#' + t.id}>{t.text}</a>
+          ))}
+        </nav>
       )}
 
       <div className="result">
         <h1>{manual.title}</h1>
         <div dangerouslySetInnerHTML={{ __html: html }} />
+        {type === 'synthesized' && (
+          <p className="disclaimer">
+            This manual was assembled by AI from the sources listed above. Verify safety-critical
+            steps against official documentation — and use a professional for gas, mains electrical,
+            or structural work.
+          </p>
+        )}
       </div>
 
       <div className="pub-actions no-print">

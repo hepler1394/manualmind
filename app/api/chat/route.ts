@@ -75,9 +75,15 @@ export async function POST(req: Request) {
           '". Use it as the primary context and answer their follow-up questions specifically, practically, and concisely. If the manual lacks the answer, you may use web_search. Never invent model-specific steps you are unsure about — say when to consult the official manual or a professional (especially for gas, electrical, or structural work).\n\nMANUAL:\n' +
           manualBody;
 
+        // Cost guards: only the last 12 turns, each capped, travel to the model.
         const convo = messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
-          .map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }));
+          .slice(-12)
+          .map((m) => ({
+            role: m.role as 'user' | 'assistant',
+            content: (m.content || '').toString().slice(0, 2000),
+          }))
+          .filter((m) => m.content.length > 0);
         if (convo.length === 0) {
           send({ stage: 'done' });
           controller.close();

@@ -28,5 +28,9 @@ export async function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // Public, cookie-free surfaces (published manuals, library, search, SEO files)
+  // skip the session-refresh roundtrip entirely.
+  matcher: [
+    '/((?!_next/static|_next/image|favicon.ico|m/|library|api/search|sitemap.xml|robots.txt|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+  ],
 };

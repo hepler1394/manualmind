@@ -51,5 +51,8 @@ export async function GET(req: Request) {
     // search is best-effort
   }
 
-  return NextResponse.json({ results: results.slice(0, 5) });
+  return NextResponse.json(
+    { results: results.slice(0, 5) },
+    { headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' } },
+  );
 }

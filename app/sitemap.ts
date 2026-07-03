@@ -8,6 +8,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const site = siteUrl();
   const entries: MetadataRoute.Sitemap = [
     { url: site, changeFrequency: 'weekly', priority: 1 },
+    { url: site + '/library', changeFrequency: 'daily', priority: 0.9 },
   ];
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;

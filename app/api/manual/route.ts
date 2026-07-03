@@ -18,7 +18,7 @@ type RedditPost = { title: string; subreddit: string; score: number; url: string
 async function fetchReddit(query: string): Promise<RedditPost[]> {
   try {
     const q = encodeURIComponent(query + ' how to OR manual OR guide OR fix OR setup');
-    const url = 'https://www.reddit.com/search.json?q=' + q + '&sort=relevance&limit=8&t=all';
+    const url = 'https://www.reddit.com/search.json?q=' + q + '&sort=relevance&limit=12&t=all';
     const res = await fetch(url, {
       headers: { 'User-Agent': 'ManualMind/1.0 (manual finder)' },
       cache: 'no-store',
@@ -30,6 +30,7 @@ async function fetchReddit(query: string): Promise<RedditPost[]> {
     return children
       .map((c: any) => c.data)
       .filter((d: any) => d && !d.over_18)
+      .sort((a: any, b: any) => (b.score || 0) - (a.score || 0))
       .slice(0, 8)
       .map((d: any) => ({
         title: d.title || '',
@@ -64,11 +65,16 @@ async function fetchYouTube(query: string): Promise<Video[]> {
     const seen = new Set<string>();
     const re = /"videoRenderer":\{"videoId":"([\w-]{11})"[\s\S]{0,2000}?"title":\{"runs":\[\{"text":"((?:[^"\\]|\\.)*)"/g;
     let m: RegExpExecArray | null;
+    const seenTitles = new Set<string>();
     while ((m = re.exec(html)) && out.length < 6) {
       if (seen.has(m[1])) continue;
       seen.add(m[1]);
       try {
-        out.push({ id: m[1], title: JSON.parse('"' + m[2] + '"') });
+        const title = JSON.parse('"' + m[2] + '"');
+        const norm = title.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().slice(0, 60);
+        if (seenTitles.has(norm)) continue; // near-duplicate uploads of the same tutorial
+        seenTitles.add(norm);
+        out.push({ id: m[1], title });
       } catch {}
     }
     return out;
@@ -151,8 +157,12 @@ export async function POST(req: Request) {
 
   const body = await req.json().catch(() => ({}));
   const query: string = (body.query || '').toString().trim().slice(0, 500);
-  const image: string | undefined = body.image;
-  const spaceId: string | null = body.spaceId || null;
+  let image: string | undefined = body.image;
+  if (image && image.length > 6_500_000) image = undefined; // ~4.8MB binary; reject oversized uploads gracefully
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const spaceId: string | null =
+    body.spaceId && UUID_RE.test(String(body.spaceId)) ? body.spaceId : null;
+  const startedAt = Date.now();
 
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
 
@@ -362,7 +372,7 @@ export async function POST(req: Request) {
           }
         }
 
-        send({ stage: 'done' });
+        send({ stage: 'done', seconds: Math.round((Date.now() - startedAt) / 1000) });
       } catch (e: any) {
         send({ stage: 'error', message: e && e.message ? e.message : String(e) });
       }
