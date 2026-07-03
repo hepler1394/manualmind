@@ -26,6 +26,7 @@
 }
 
 * { box-sizing: border-box; }
+html { color-scheme: only light; }
 html, body { padding: 0; margin: 0; }
 body {
   background: var(--canvas);
