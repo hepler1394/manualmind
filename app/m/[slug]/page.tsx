@@ -4,6 +4,7 @@ import { cache } from 'react';
 import { marked } from 'marked';
 import { createClient } from '@supabase/supabase-js';
 import { siteUrl } from '@/lib/site';
+import PrintButton from './print-button';
 
 export const revalidate = 300;
 
@@ -22,16 +23,19 @@ type PublicManual = {
   created_at: string | null;
 };
 
+function anonClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    { auth: { persistSession: false, autoRefreshToken: false } },
+  );
+}
+
 const getManual = cache(async (slug: string): Promise<PublicManual | null> => {
   if (!DB_ENABLED || !slug) return null;
   try {
     // Anon client: RLS only exposes rows the owner explicitly published.
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { auth: { persistSession: false, autoRefreshToken: false } },
-    );
-    const { data } = await supabase
+    const { data } = await anonClient()
       .from('manuals')
       .select('title, type, body, meta, official_manual, published_at, created_at')
       .eq('public_slug', slug)
@@ -41,6 +45,24 @@ const getManual = cache(async (slug: string): Promise<PublicManual | null> => {
     return null;
   }
 });
+
+async function getRelated(slug: string): Promise<{ slug: string; title: string }[]> {
+  if (!DB_ENABLED) return [];
+  try {
+    const { data } = await anonClient()
+      .from('manuals')
+      .select('title, public_slug')
+      .not('public_slug', 'is', null)
+      .neq('public_slug', slug)
+      .order('published_at', { ascending: false })
+      .limit(3);
+    return (data || [])
+      .filter((r: any) => r.public_slug)
+      .map((r: any) => ({ slug: r.public_slug, title: r.title }));
+  } catch {
+    return [];
+  }
+}
 
 function plainDescription(md: string): string {
   const text = md
@@ -54,8 +76,8 @@ function plainDescription(md: string): string {
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const manual = await getManual(params.slug);
-  if (!manual) return { title: 'Manual not found — ManualMind', robots: { index: false } };
-  const title = manual.title + ' — manual & guide | ManualMind';
+  if (!manual) return { title: 'Manual not found', robots: { index: false } };
+  const title = manual.title + ' — manual & guide';
   const description = plainDescription(manual.body) || 'A step-by-step manual built by ManualMind.';
   const url = siteUrl() + '/m/' + params.slug;
   return {
@@ -70,6 +92,8 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 export default async function PublicManualPage({ params }: { params: { slug: string } }) {
   const manual = await getManual(params.slug);
   if (!manual) notFound();
+  const related = await getRelated(params.slug);
+  const publishedDate = (manual.published_at || manual.created_at || '').slice(0, 10);
 
   const type = manual.type || 'synthesized';
   const bannerTitle =
@@ -87,10 +111,19 @@ export default async function PublicManualPage({ params }: { params: { slug: str
     author: { '@type': 'Organization', name: 'ManualMind' },
     publisher: { '@type': 'Organization', name: 'ManualMind' },
   };
+  const breadcrumbLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      { '@type': 'ListItem', position: 1, name: 'ManualMind', item: siteUrl() },
+      { '@type': 'ListItem', position: 2, name: manual.title, item: siteUrl() + '/m/' + params.slug },
+    ],
+  };
 
   return (
     <div className="wrap">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbLd) }} />
       <a className="pub-brand no-print" href="/">ManualMind</a>
 
       <div className={'banner ' + type}>
@@ -112,10 +145,27 @@ export default async function PublicManualPage({ params }: { params: { slug: str
         </div>
       </div>
 
+      {publishedDate && (
+        <p className="pub-meta no-print">Published {publishedDate} · From the ManualMind library</p>
+      )}
+
       <div className="result">
         <h1>{manual.title}</h1>
         <div dangerouslySetInnerHTML={{ __html: html }} />
       </div>
+
+      <div className="pub-actions no-print">
+        <PrintButton />
+      </div>
+
+      {related.length > 0 && (
+        <div className="related no-print">
+          <h2>More from the library</h2>
+          {related.map((r) => (
+            <a key={r.slug} href={'/m/' + r.slug}>{r.title}</a>
+          ))}
+        </div>
+      )}
 
       <div className="pub-cta no-print">
         <p>Need a manual for something else? ManualMind finds the official one — or builds it for you.</p>

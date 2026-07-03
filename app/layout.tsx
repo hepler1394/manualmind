@@ -1,10 +1,15 @@
 import type { Metadata, Viewport } from 'next';
+import { siteUrl } from '@/lib/site';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'ManualMind — a manual for anything',
+  metadataBase: new URL(siteUrl()),
+  title: {
+    default: 'ManualMind — the manual for anything',
+    template: '%s — ManualMind',
+  },
   description:
-    'AI that finds the official manual for anything, or builds one in real time from Reddit and the web. Upload a photo or just type.',
+    'Find the official manual for anything — or get a better one built live from Reddit, the web, and YouTube. Type it, snap a photo, or upload a PDF.',
   manifest: '/manifest.webmanifest',
   applicationName: 'ManualMind',
   appleWebApp: { capable: true, title: 'ManualMind', statusBarStyle: 'black-translucent' },

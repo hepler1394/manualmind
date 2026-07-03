@@ -15,7 +15,11 @@ export async function PATCH(req: Request) {
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
 
   const space_id = body.space_id === null || body.space_id === '' ? null : body.space_id;
-  const { error } = await supabase.from('manuals').update({ space_id }).eq('id', id);
+  const { error } = await supabase
+    .from('manuals')
+    .update({ space_id })
+    .eq('id', id)
+    .eq('user_id', user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }
@@ -31,7 +35,7 @@ export async function DELETE(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
 
-  const { error } = await supabase.from('manuals').delete().eq('id', id);
+  const { error } = await supabase.from('manuals').delete().eq('id', id).eq('user_id', user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

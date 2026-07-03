@@ -46,9 +46,46 @@ function typeLabel(type?: string | null): string {
 
 const EXAMPLES = [
   'Reset a Nest thermostat to factory settings',
+  'Samsung washer flashing error code 4C',
   'Replace the brake pads on a Trek mountain bike',
+  'Mac and cheese in a Ninja Speedi',
   'Sourdough starter from scratch',
-  'Set up an Anova sous vide for the first time',
+  'Install RetroArch on a Steam Deck',
+];
+
+const PLACEHOLDERS = [
+  'What do you need a manual for?',
+  'Try "LG dishwasher OE error"…',
+  'Try "jailbreak an iPhone X"…',
+  'Try "sharpen a chainsaw chain"…',
+  'Try "best settings for a Ninja Speedi"…',
+];
+
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: 'Is ManualMind free?',
+    a: 'Yes. You get 3 manuals a day with no account, and 5 a month with a free account — plus the library, spaces, chat, and reminders. Pro is $20/month for unlimited manuals and quick-start cards.',
+  },
+  {
+    q: 'Where do the answers come from?',
+    a: 'The manufacturer’s official documentation first. Then real Reddit threads from people who actually fixed the problem, the open web, and YouTube tutorials. Every manual ends with its sources, linked.',
+  },
+  {
+    q: 'Can I upload the manual I already have?',
+    a: 'Yes — upload any PDF and ManualMind treats it as the authoritative source, then layers real-world tips and troubleshooting on top of it.',
+  },
+  {
+    q: 'What does "Complete manual" do?',
+    a: 'It publishes your finished manual to the public library as its own web page. It becomes searchable here and indexable by Google, so the next person with your exact problem gets the answer instantly.',
+  },
+  {
+    q: 'Can I trust it for safety-critical repairs?',
+    a: 'Treat it like an expert friend, not a licensed technician. Every step is sourced so you can verify against the official manual — and for gas, mains electrical, or structural work, hire a professional.',
+  },
+  {
+    q: 'Does it work on my phone?',
+    a: 'Yes. The site installs as an app on iPhone and Android — open it in your browser and choose "Add to Home Screen."',
+  },
 ];
 
 const HISTORY_KEY = 'mm_history_v1';
@@ -138,7 +175,35 @@ export default function Home() {
   const [remInterval, setRemInterval] = useState('90');
   const [busyCard, setBusyCard] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [lastRun, setLastRun] = useState<string | null>(null);
+  const [phIdx, setPhIdx] = useState(0);
   const [supabase] = useState(() => (hasAuth ? createClient() : null));
+
+  // Rotate the search placeholder while the field is empty.
+  useEffect(() => {
+    const t = setInterval(() => setPhIdx((i) => (i + 1) % PLACEHOLDERS.length), 3500);
+    return () => clearInterval(t);
+  }, []);
+
+  // Focus search on load (desktop only — avoids popping the mobile keyboard).
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth > 760) searchRef.current?.focus();
+  }, []);
+
+  // Press "/" anywhere to jump to search.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = document.activeElement;
+      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || (el as HTMLElement).isContentEditable)) return;
+      e.preventDefault();
+      searchRef.current?.focus();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   const { meta, body, metaClosed } = splitMeta(raw);
   const spaces: Space[] = me.spaces || [];
@@ -325,12 +390,27 @@ export default function Home() {
   }
   function shareManual() {
     if (!body) return;
+    // Published manuals share their clean public URL; otherwise fall back to a hash link.
+    const currentSlug = currentManualId
+      ? dbManuals.find((m) => m.id === currentManualId)?.public_slug
+      : null;
+    if (currentSlug) {
+      navigator.clipboard
+        .writeText(window.location.origin + '/m/' + currentSlug)
+        .then(() => flash('Public link copied'));
+      return;
+    }
     const code = encodeShare(meta, body);
     const url = window.location.origin + window.location.pathname + '#m=' + code;
     navigator.clipboard.writeText(url).then(() => flash('Shareable link copied'));
     try {
       window.history.replaceState(null, '', '#m=' + code);
     } catch {}
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
+    flash('Stopped');
   }
   function savePdf() {
     window.print();
@@ -487,9 +567,11 @@ export default function Home() {
   }
 
   async function run(q?: string) {
-    const text = (q !== undefined ? q : query).trim();
+    const text = (q !== undefined ? q : query).trim().slice(0, 500);
     if (!text && !image) return;
     if (q !== undefined) setQuery(q);
+    setLastRun(text);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
     setRaw('');
     setError(null);
     setLimitHit(false);
@@ -505,11 +587,14 @@ export default function Home() {
     setCurrentTitle(text || 'Manual');
 
     let finalRaw = '';
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const res = await fetch('/api/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query: text, image, spaceId: me.signedIn ? targetSpace || null : null }),
+        signal: controller.signal,
       });
       if (!res.body) throw new Error('No response stream.');
       const reader = res.body.getReader();
@@ -569,8 +654,13 @@ export default function Home() {
         else saveLocal(finalRaw);
       }
     } catch (e: any) {
-      setError(e && e.message ? e.message : 'Request failed.');
+      if (e && e.name === 'AbortError') {
+        // user hit Stop — keep whatever streamed so far, no error banner
+      } else {
+        setError(e && e.message ? e.message : 'Request failed.');
+      }
     } finally {
+      abortRef.current = null;
       setRunning(false);
       setActive(null);
     }
@@ -694,8 +784,9 @@ export default function Home() {
       <div className="panel no-print">
         <div className="searchrow">
           <input
+            ref={searchRef}
             type="text"
-            placeholder="What do you need a manual for?"
+            placeholder={PLACEHOLDERS[phIdx]}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter' && !running) run(); }}
@@ -780,6 +871,14 @@ export default function Home() {
         </div>
       )}
 
+      {running && (
+        <div className="stoprow no-print">
+          <button className="tb" onClick={stopGeneration}>Stop</button>
+        </div>
+      )}
+
+      {running && !body && <div className="preparing no-print">Preparing your manual</div>}
+
       {identified && (
         <div className="banner community no-print" style={{ marginTop: 14 }}>
           <span className="tag">Identified</span>
@@ -790,6 +889,11 @@ export default function Home() {
       {error && (
         <div className="err no-print">
           <div>{error}</div>
+          {!limitHit && lastRun && (
+            <div className="limitcta">
+              <button className="tb" onClick={() => run(lastRun)}>Try again</button>
+            </div>
+          )}
           {limitHit && (
             <div className="limitcta">
               {me.signedIn ? (
@@ -945,6 +1049,16 @@ export default function Home() {
         </div>
       )}
 
+      {me.signedIn && allLibrary.length === 0 && idle && (
+        <div className="welcome no-print">
+          <h2>Your library starts here.</h2>
+          <p>
+            Get your first manual and it saves automatically. Group manuals into spaces, set
+            maintenance reminders, and ask follow-ups any time.
+          </p>
+        </div>
+      )}
+
       {library.length > 0 && (
         <div className="history no-print">
           <h2>{me.signedIn ? (activeSpace ? spaceName(activeSpace) : 'Your library') : 'Recent (saved on this device)'}</h2>
@@ -1058,6 +1172,65 @@ export default function Home() {
                 <p>One click turns your manual into a public page anyone can find.</p>
               </div>
             </div>
+          </div>
+
+          <div className="section no-print">
+            <div className="kicker">Pricing</div>
+            <h2 className="big">Free to start. Simple to grow.</h2>
+            <div className="pricegrid">
+              <div className="pricecard free">
+                <div className="tier">Free</div>
+                <div className="price">$0<span> forever</span></div>
+                <ul>
+                  <li>3 manuals a day, no account needed</li>
+                  <li>5 manuals a month with a free account</li>
+                  <li>Cloud library and spaces</li>
+                  <li>Follow-up chat on every manual</li>
+                  <li>Maintenance reminders</li>
+                  <li>Save as PDF, share, and publish</li>
+                </ul>
+                <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Get started</button>
+              </div>
+              <div className="pricecard pro">
+                <div className="tier">Pro</div>
+                <div className="price">$20<span> /month</span></div>
+                <ul>
+                  <li>Everything in Free</li>
+                  <li>Unlimited manuals</li>
+                  <li>Quick-start cards — any manual on one printable page</li>
+                  <li>Priority pipeline</li>
+                  <li>Cancel anytime</li>
+                </ul>
+                <a className="cta" href="/login">Sign in to upgrade</a>
+              </div>
+            </div>
+          </div>
+
+          <div className="section no-print">
+            <div className="kicker">Questions</div>
+            <h2 className="big">Everything people ask.</h2>
+            <div className="faq">
+              {FAQS.map((f) => (
+                <details key={f.q}>
+                  <summary>{f.q}</summary>
+                  <p>{f.a}</p>
+                </details>
+              ))}
+            </div>
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{
+                __html: JSON.stringify({
+                  '@context': 'https://schema.org',
+                  '@type': 'FAQPage',
+                  mainEntity: FAQS.map((f) => ({
+                    '@type': 'Question',
+                    name: f.q,
+                    acceptedAnswer: { '@type': 'Answer', text: f.a },
+                  })),
+                }),
+              }}
+            />
           </div>
 
           <div className="ctaband no-print">

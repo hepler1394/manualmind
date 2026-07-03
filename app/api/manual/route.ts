@@ -22,6 +22,7 @@ async function fetchReddit(query: string): Promise<RedditPost[]> {
     const res = await fetch(url, {
       headers: { 'User-Agent': 'ManualMind/1.0 (manual finder)' },
       cache: 'no-store',
+      signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return [];
     const data: any = await res.json();
@@ -55,6 +56,7 @@ async function fetchYouTube(query: string): Promise<Video[]> {
         'Accept-Language': 'en-US,en;q=0.9',
       },
       cache: 'no-store',
+      signal: AbortSignal.timeout(6000),
     });
     if (!res.ok) return [];
     const html = (await res.text()).slice(0, 900_000);
@@ -148,7 +150,7 @@ export async function POST(req: Request) {
   const encoder = new TextEncoder();
 
   const body = await req.json().catch(() => ({}));
-  const query: string = (body.query || '').toString().trim();
+  const query: string = (body.query || '').toString().trim().slice(0, 500);
   const image: string | undefined = body.image;
   const spaceId: string | null = body.spaceId || null;
 
