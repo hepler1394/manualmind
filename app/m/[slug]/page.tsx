@@ -21,6 +21,8 @@ type PublicManual = {
   official_manual: string | null;
   published_at: string | null;
   created_at: string | null;
+  verified: boolean | null;
+  edited_at: string | null;
 };
 
 function anonClient() {
@@ -37,7 +39,7 @@ const getManual = cache(async (slug: string): Promise<PublicManual | null> => {
     // Anon client: RLS only exposes rows the owner explicitly published.
     const { data } = await anonClient()
       .from('manuals')
-      .select('title, type, body, meta, official_manual, published_at, created_at')
+      .select('title, type, body, meta, official_manual, published_at, created_at, verified, edited_at')
       .eq('public_slug', slug)
       .single();
     return (data as PublicManual) || null;
@@ -185,7 +187,14 @@ export default async function PublicManualPage({ params }: { params: { slug: str
 
       <p className="pub-meta no-print">
         {publishedDate ? 'Published ' + publishedDate + ' · ' : ''}
-        {stats.minutes} min read · {stats.words.toLocaleString()} words · From the ManualMind library
+        {stats.minutes} min read · {stats.words.toLocaleString()} words ·{' '}
+        {manual.verified ? (
+          <span className="vbadge ok">✓ Verified</span>
+        ) : manual.edited_at ? (
+          <span className="vbadge">Community-edited · awaiting re-verification</span>
+        ) : (
+          <span className="vbadge">Unverified</span>
+        )}
       </p>
 
       {toc.length > 1 && (

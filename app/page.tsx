@@ -26,6 +26,7 @@ type LibItem = {
   meta: Meta | null;
   space_id?: string | null;
   public_slug?: string | null;
+  verified?: boolean;
 };
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
 type Me = {
@@ -48,7 +49,7 @@ const STAGES = [
 ];
 
 type Video = { id: string; title: string };
-type Featured = { slug: string; title: string; type: string; published_at: string | null };
+type Featured = { slug: string; title: string; type: string; published_at: string | null; verified?: boolean };
 
 function typeLabel(type?: string | null): string {
   return type === 'official' ? 'Official'
@@ -89,7 +90,7 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Can I upload the manual I already have?',
-    a: 'Yes — upload any PDF and ManualMind treats it as the authoritative source, then layers real-world tips and troubleshooting on top of it.',
+    a: 'Yes — upload any PDF and ManualMind treats it as the authoritative source, then layers real-world tips and troubleshooting on top of it. Pro users can also pour in up to 3 source links per manual — docs pages, forum threads, spec sheets — and the manual is built from those first.',
   },
   {
     q: 'What does "Complete manual" do?',
@@ -224,6 +225,19 @@ export default function Home() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [busyEdit, setBusyEdit] = useState(false);
+  const [sourceUrls, setSourceUrls] = useState<string[]>([]);
+  const [sourceInput, setSourceInput] = useState('');
+
+  function addSource() {
+    const u = sourceInput.trim();
+    if (!/^https?:\/\/.+\..+/.test(u)) {
+      flash('Enter a full link, like https://…');
+      return;
+    }
+    if (sourceUrls.length >= 3 || sourceUrls.includes(u)) return;
+    setSourceUrls([...sourceUrls, u]);
+    setSourceInput('');
+  }
   const searchAbort = useRef<AbortController | null>(null);
   const msgsRef = useRef<HTMLDivElement>(null);
   const [supabase] = useState(() => (hasAuth ? createClient() : null));
@@ -340,6 +354,7 @@ export default function Home() {
     meta: m.meta || (m.official_manual ? { officialManual: m.official_manual, type: m.type } : null),
     space_id: m.space_id || null,
     public_slug: m.public_slug || null,
+    verified: !!m.verified,
   }));
   const allLibrary: LibItem[] = me.signedIn ? dbManuals : history;
   const library: LibItem[] =
@@ -541,6 +556,8 @@ export default function Home() {
     setVideos([]);
     setPlaying(new Set());
     setEditing(false);
+    setSourceUrls([]);
+    setSourceInput('');
     setCurrentManualId(null);
     setCurrentTitle('');
     setChat([]);
@@ -644,6 +661,31 @@ export default function Home() {
       flash('Could not save.');
     } finally {
       setBusySave(false);
+    }
+  }
+
+  const [busyVerify, setBusyVerify] = useState(false);
+  async function verifyManual() {
+    if (!currentManualId || busyVerify) return;
+    setBusyVerify(true);
+    flash('Running verification checks…');
+    try {
+      const res = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentManualId }),
+      });
+      const data = await res.json();
+      if (data.verified) {
+        flash('Verified — badge restored');
+        loadMe();
+      } else {
+        flash(data.reason ? 'Not verified: ' + data.reason : data.error || 'Verification failed.');
+      }
+    } catch {
+      flash('Verification failed.');
+    } finally {
+      setBusyVerify(false);
     }
   }
 
@@ -834,7 +876,12 @@ export default function Home() {
       const res = await fetch('/api/manual', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: text, image, spaceId: me.signedIn ? targetSpace || null : null }),
+        body: JSON.stringify({
+          query: text,
+          image,
+          spaceId: me.signedIn ? targetSpace || null : null,
+          sources: isPro ? sourceUrls : [],
+        }),
         signal: controller.signal,
       });
       if (!res.body) throw new Error('No response stream.');
@@ -1114,6 +1161,45 @@ export default function Home() {
             </select>
           )}
         </div>
+        {hasAuth && (
+          isPro ? (
+            <div className="srcrow">
+              <div className="srcadd">
+                <input
+                  type="text"
+                  placeholder="Add a source link the manual must use (docs page, forum thread…)"
+                  value={sourceInput}
+                  maxLength={2000}
+                  onChange={(e) => setSourceInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSource(); } }}
+                />
+                <button className="tb" onClick={addSource} disabled={sourceUrls.length >= 3}>
+                  Add source
+                </button>
+              </div>
+              {sourceUrls.length > 0 && (
+                <div className="srcchips">
+                  {sourceUrls.map((u) => (
+                    <span key={u} className="srcchip">
+                      <span className="srcurl">{u.replace(/^https?:\/\/(www\.)?/, '').slice(0, 48)}</span>
+                      <button onClick={() => setSourceUrls(sourceUrls.filter((x) => x !== u))} aria-label="remove source">×</button>
+                    </span>
+                  ))}
+                  <span className="srcnote">{sourceUrls.length}/3 sources — treated as authoritative</span>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="srcrow locked">
+              <span className="probadge">Pro</span> Pour in your own sources — links your manual must be built from.
+              {me.signedIn ? (
+                <button className="srclink" onClick={upgrade}>Upgrade</button>
+              ) : (
+                <a className="srclink" href="/login">Sign in</a>
+              )}
+            </div>
+          )
+        )}
         {idle && (
           <div className="panelfoot no-print">
             <span>Free · No sign-up needed · Sources cited</span>
@@ -1280,6 +1366,15 @@ export default function Home() {
           {me.signedIn && currentDbManual && !editing && (
             <button onClick={startEdit} title="Edit this manual's markdown">Edit</button>
           )}
+          {me.signedIn && currentDbManual && (
+            currentDbManual.verified ? (
+              <button disabled title="Sources checked — verified manual">✓ Verified</button>
+            ) : (
+              <button disabled={busyVerify} onClick={verifyManual} title="Run AI checks to restore the verified badge">
+                {busyVerify ? 'Checking…' : 'Request verification'}
+              </button>
+            )
+          )}
           <button onClick={copyManual}>{copied ? 'Copied' : 'Copy'}</button>
           <button onClick={shareManual}>Share link</button>
         </div>
@@ -1368,7 +1463,9 @@ export default function Home() {
             </button>
             <button className="tb" onClick={() => setEditing(false)}>Cancel</button>
             <span className="edithint">
-              {publicSlug ? 'This manual is published — your edits go live for everyone.' : 'Markdown: ## headings, - lists, [links](url)'}
+              {publicSlug
+                ? 'Published manual — edits go live for everyone and drop the verified badge until re-checked.'
+                : 'Markdown: ## headings, - lists, [links](url). Edits mark the manual unverified until re-checked.'}
             </span>
           </div>
         </div>
@@ -1544,7 +1641,7 @@ export default function Home() {
                     <span className="poster-letter" aria-hidden="true">
                       {(f.title || 'M').trim().charAt(0).toUpperCase()}
                     </span>
-                    <span className="poster-type">{typeLabel(f.type)} manual</span>
+                    <span className="poster-type">{f.verified ? '✓ ' : ''}{typeLabel(f.type)} manual</span>
                     <span className="poster-title">{f.title}</span>
                     <span className="poster-sub">{f.published_at ? 'Published ' + f.published_at : 'From the community library'}</span>
                   </a>
@@ -1717,6 +1814,7 @@ export default function Home() {
                   <li>Everything in Free</li>
                   <li>Unlimited manuals</li>
                   <li>Every video walkthrough, unlocked</li>
+                  <li>Pour in your own sources — links your manual is built from</li>
                   <li>Quick-start cards — any manual on one printable page</li>
                   <li>Priority pipeline</li>
                   <li>Cancel anytime</li>

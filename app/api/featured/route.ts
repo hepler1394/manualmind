@@ -18,7 +18,7 @@ export async function GET() {
     );
     const { data } = await supabase
       .from('manuals')
-      .select('title, type, public_slug, published_at')
+      .select('title, type, public_slug, published_at, verified')
       .not('public_slug', 'is', null)
       .order('published_at', { ascending: false })
       .limit(6);
@@ -29,6 +29,7 @@ export async function GET() {
         title: r.title,
         type: r.type || 'synthesized',
         published_at: r.published_at ? String(r.published_at).slice(0, 10) : null,
+        verified: !!r.verified,
       }));
     return NextResponse.json(
       { manuals },

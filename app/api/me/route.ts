@@ -42,7 +42,7 @@ export async function GET() {
 
     const { data: manuals } = await supabase
       .from('manuals')
-      .select('id, title, type, body, meta, official_manual, space_id, public_slug, created_at')
+      .select('id, title, type, body, meta, official_manual, space_id, public_slug, verified, created_at')
       .order('created_at', { ascending: false })
       .limit(200);
 

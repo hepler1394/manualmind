@@ -30,6 +30,7 @@ export async function POST(req: Request) {
         body.meta && typeof body.meta === 'object' && body.meta.officialManual
           ? String(body.meta.officialManual).slice(0, 2000)
           : null,
+      verified: true,
     })
     .select('id')
     .single();
@@ -55,6 +56,9 @@ export async function PATCH(req: Request) {
   }
   if (typeof body.body === 'string' && body.body.trim().length >= 20) {
     updates.body = body.body.slice(0, 200_000);
+    // Human edits drop the verified badge until the manual is re-checked.
+    updates.verified = false;
+    updates.edited_at = new Date().toISOString();
   }
   if (typeof body.title === 'string' && body.title.trim()) {
     updates.title = body.title.trim().slice(0, 200);

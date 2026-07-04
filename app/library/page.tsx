@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/library' },
 };
 
-type Item = { slug: string; title: string; type: string | null; published_at: string | null };
+type Item = { slug: string; title: string; type: string | null; published_at: string | null; verified: boolean };
 
 async function getManuals(): Promise<Item[]> {
   if (!DB_ENABLED) return [];
@@ -26,7 +26,7 @@ async function getManuals(): Promise<Item[]> {
     );
     const { data } = await supabase
       .from('manuals')
-      .select('title, type, public_slug, published_at')
+      .select('title, type, public_slug, published_at, verified')
       .not('public_slug', 'is', null)
       .order('published_at', { ascending: false })
       .limit(60);
@@ -37,6 +37,7 @@ async function getManuals(): Promise<Item[]> {
         title: r.title,
         type: r.type || null,
         published_at: r.published_at,
+        verified: !!r.verified,
       }));
   } catch {
     return [];
@@ -96,7 +97,7 @@ export default async function LibraryPage() {
               <span className="poster-letter" aria-hidden="true">
                 {(m.title || 'M').trim().charAt(0).toUpperCase()}
               </span>
-              <span className="poster-type">{typeLabel(m.type)} manual</span>
+              <span className="poster-type">{m.verified ? '✓ ' : ''}{typeLabel(m.type)} manual</span>
               <span className="poster-title">{m.title}</span>
               {m.published_at && <span className="poster-sub">Published {m.published_at.slice(0, 10)}</span>}
             </a>

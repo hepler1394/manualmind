@@ -83,6 +83,32 @@ async function fetchYouTube(query: string): Promise<Video[]> {
   }
 }
 
+// Pro feature: fetch a user-provided source URL and return readable text (crudely de-HTML'd).
+async function fetchSourceText(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'ManualMind/1.0 (source reader)' },
+      cache: 'no-store',
+      signal: AbortSignal.timeout(6000),
+      redirect: 'follow',
+    });
+    if (!res.ok) return '';
+    const ct = res.headers.get('content-type') || '';
+    if (!/text|html|json|xml/.test(ct)) return '';
+    const raw = (await res.text()).slice(0, 400_000);
+    return raw
+      .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&[a-z#0-9]+;/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 5000);
+  } catch {
+    return '';
+  }
+}
+
 function parseDataUrl(image: string): { mediaType: string; data: string } | null {
   if (!image.startsWith('data:')) return null;
   const semi = image.indexOf(';');
@@ -162,6 +188,13 @@ export async function POST(req: Request) {
   const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
   const spaceId: string | null =
     body.spaceId && UUID_RE.test(String(body.spaceId)) ? body.spaceId : null;
+  // Pro: user-provided source links, fed to the model as authoritative context.
+  const requestedSources: string[] = Array.isArray(body.sources)
+    ? body.sources
+        .filter((s: any) => typeof s === 'string' && /^https?:\/\//i.test(s))
+        .map((s: string) => s.slice(0, 2000))
+        .slice(0, 3)
+    : [];
   const startedAt = Date.now();
 
   const ip = (req.headers.get('x-forwarded-for') || '').split(',')[0].trim() || 'unknown';
@@ -200,6 +233,7 @@ export async function POST(req: Request) {
         }
 
         // ---- Usage caps (only when DB is enabled) ----
+        let userIsPro = false;
         if (DB_ENABLED && admin) {
           if (user) {
             const { data: profile } = await admin
@@ -208,6 +242,7 @@ export async function POST(req: Request) {
               .eq('id', user.id)
               .single();
             const plan = profile?.plan || 'free';
+            userIsPro = isPro(plan);
             if (!isPro(plan)) {
               const { count } = await admin
                 .from('usage')
@@ -259,6 +294,16 @@ export async function POST(req: Request) {
           send({ stage: 'identified', product: subject });
         }
 
+        // Pro-only: pull in the user's own source links before anything else.
+        let userSourcesContext = '';
+        if (requestedSources.length > 0 && userIsPro) {
+          const texts = await Promise.all(requestedSources.map(fetchSourceText));
+          userSourcesContext = requestedSources
+            .map((u, i) => (texts[i] ? '### Source: ' + u + '\n' + texts[i] : ''))
+            .filter(Boolean)
+            .join('\n\n');
+        }
+
         send({ stage: 'reddit' });
         const reddit = await fetchReddit(subject);
         send({ stage: 'reddit_done', count: reddit.length });
@@ -293,6 +338,10 @@ export async function POST(req: Request) {
 
         const userPrompt =
           'The user needs a manual or guide for: "' + subject + '".\n\n' +
+          (userSourcesContext
+            ? 'USER-PROVIDED SOURCES (the user supplied these links themselves — treat them as high-priority, authoritative context and cite them):\n' +
+              userSourcesContext + '\n\n'
+            : '') +
           'Community discussions found so far (real-world tips, gotchas, fixes — cite the most useful):\n' +
           redditContext +
           '\n\nVideo tutorials found:\n' +
@@ -366,6 +415,8 @@ export async function POST(req: Request) {
                   // Videos ride along in meta so saved manuals reopen with their walkthroughs.
                   meta: { ...(meta || {}), videos: videos.slice(0, 4) },
                   official_manual: (meta && meta.officialManual) || null,
+                  // Fresh AI output with cited sources counts as verified until a human edits it.
+                  verified: true,
                 })
                 .select('id')
                 .single();

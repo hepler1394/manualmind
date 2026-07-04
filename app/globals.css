@@ -346,6 +346,20 @@ button.go:disabled { opacity: 0.4; cursor: default; }
 .lr-item mark { background: rgba(43, 127, 255, 0.25); color: inherit; border-radius: 2px; padding: 0 1px; }
 
 .panelfoot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding: 0 4px; font-size: 12.5px; color: var(--faint); flex-wrap: wrap; }
+
+/* ---------- Pro source links ---------- */
+.srcrow { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hairline-soft); }
+.srcrow.locked { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); flex-wrap: wrap; }
+.srcrow .probadge { font-size: 10px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--haze); border-radius: var(--radius-input); padding: 2px 6px; }
+.srclink { background: none; border: none; padding: 0 2px 1px; color: var(--signal); border-bottom: 2px solid var(--signal); font: inherit; font-weight: 500; cursor: pointer; text-decoration: none; }
+.srcadd { display: flex; gap: 8px; }
+.srcadd input { font-size: 14px; padding: 10px 12px; }
+.srcchips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.srcchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--whiteout); border: 1px solid var(--hairline); border-radius: var(--radius-pill); padding: 5px 6px 5px 12px; }
+.srcchip .srcurl { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.srcchip button { background: none; border: none; color: var(--faint); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 4px; }
+.srcchip button:hover { color: var(--danger); }
+.srcnote { font-size: 12px; color: var(--faint); }
 .panelfoot a { color: var(--signal); text-decoration: none; font-weight: 500; border-bottom: 2px solid var(--signal); }
 .kbdhint { color: #a5a5aa; }
 
@@ -460,6 +474,8 @@ button.go:disabled { opacity: 0.4; cursor: default; }
 .pub-cta a { display: inline-block; background: transparent; color: var(--whiteout); border: 1px solid var(--whiteout); font-weight: 500; border-radius: var(--radius-btn); padding: 12px 24px; text-decoration: none; transition: background 0.2s var(--ease), color 0.2s var(--ease); }
 .pub-cta a:hover { background: var(--whiteout); color: var(--ink); }
 .pub-meta { margin: 10px auto 0; max-width: 720px; color: var(--faint); font-size: 13px; }
+.vbadge { display: inline-block; font-size: 11px; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid var(--hairline); border-radius: var(--radius-input); padding: 2px 7px; color: var(--dim); }
+.vbadge.ok { color: var(--good); border-color: rgba(52, 211, 153, 0.4); }
 .related { margin: 30px auto 0; max-width: 720px; }
 .related h2 { font-size: 12px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); margin: 0 0 10px; }
 .related a { display: block; background: transparent; border: 1px solid var(--hairline-soft); border-radius: var(--radius-card); padding: 14px 18px; margin-bottom: 8px; text-decoration: none; color: var(--whiteout); font-size: 14.5px; font-weight: 500; transition: border-color 0.2s var(--ease); }
@@ -488,7 +504,7 @@ button.go:disabled { opacity: 0.4; cursor: default; }
 @media (max-width: 700px) {
   .compare, .libgrid, .postergrid, .pricegrid { grid-template-columns: 1fr; }
   .bfgrid { grid-template-columns: 1fr; gap: 20px; }
-  .kbdhint, .navlink { display: none; }
+  .kbdhint, a.navlink { display: none; } /* keep the theme button (a <button>) visible on mobile */
   .usage { display: none; }
   .tb { min-height: 40px; }
   .nf h1 { font-size: 38px; }
