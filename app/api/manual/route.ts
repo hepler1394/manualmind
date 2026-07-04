@@ -363,7 +363,8 @@ export async function POST(req: Request) {
                   title: (meta && meta.product) || subject || 'Manual',
                   type: (meta && meta.type) || 'synthesized',
                   body: manualBody || full,
-                  meta: meta || null,
+                  // Videos ride along in meta so saved manuals reopen with their walkthroughs.
+                  meta: { ...(meta || {}), videos: videos.slice(0, 4) },
                   official_manual: (meta && meta.officialManual) || null,
                 })
                 .select('id')

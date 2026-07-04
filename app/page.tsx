@@ -6,7 +6,16 @@ import { createClient } from '@/lib/supabase/client';
 
 marked.setOptions({ breaks: true, gfm: true });
 
-type Meta = { product?: string; officialManual?: string; type?: string; confidence?: string };
+type Meta = {
+  product?: string;
+  officialManual?: string;
+  type?: string;
+  confidence?: string;
+  videos?: { id: string; title: string }[];
+};
+
+const THEMES = ['air', 'blueprint', 'terminal'] as const;
+const THEME_LABEL: Record<string, string> = { air: 'Air', blueprint: 'Blueprint', terminal: 'Terminal' };
 type Space = { id: string; name: string };
 type Reminder = { id: string; manual_id: string | null; label: string; interval_days: number; next_due: string };
 type LibItem = {
@@ -209,6 +218,12 @@ export default function Home() {
   const [buildSeconds, setBuildSeconds] = useState<number | null>(null);
   const [featured, setFeatured] = useState<Featured[]>([]);
   const [busySave, setBusySave] = useState(false);
+  const [theme, setTheme] = useState<string>('air');
+  const [showTop, setShowTop] = useState(false);
+  const [playing, setPlaying] = useState<Set<string>>(new Set());
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState('');
+  const [busyEdit, setBusyEdit] = useState(false);
   const searchAbort = useRef<AbortController | null>(null);
   const msgsRef = useRef<HTMLDivElement>(null);
   const [supabase] = useState(() => (hasAuth ? createClient() : null));
@@ -217,6 +232,30 @@ export default function Home() {
   useEffect(() => {
     const t = setInterval(() => setPhIdx((i) => (i + 1) % PLACEHOLDERS.length), 3500);
     return () => clearInterval(t);
+  }, []);
+
+  // Theme: restore from storage; cycleTheme writes the attribute + storage.
+  useEffect(() => {
+    try {
+      const t = localStorage.getItem('mm_theme');
+      if (t && THEMES.includes(t as any)) setTheme(t);
+    } catch {}
+  }, []);
+  function cycleTheme() {
+    const next = THEMES[(THEMES.indexOf(theme as any) + 1) % THEMES.length];
+    setTheme(next);
+    try { localStorage.setItem('mm_theme', next); } catch {}
+    if (next === 'air') document.documentElement.removeAttribute('data-theme');
+    else document.documentElement.setAttribute('data-theme', next);
+    flash('Theme: ' + THEME_LABEL[next]);
+  }
+
+  // Scroll-to-top button visibility.
+  useEffect(() => {
+    const onScroll = () => setShowTop(window.scrollY > 600);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
   // Focus search on load (desktop only — avoids popping the mobile keyboard).
@@ -405,7 +444,8 @@ export default function Home() {
       title: (parsed.meta && parsed.meta.product) || identified || query || 'Manual',
       type: (parsed.meta && parsed.meta.type) || 'synthesized',
       body: parsed.body,
-      meta: parsed.meta,
+      // Keep the found videos with the manual so they come back when it's reopened.
+      meta: { ...(parsed.meta || {}), videos: videos.slice(0, 4) },
     };
     persistLocal([item, ...history].slice(0, 30));
   }
@@ -416,7 +456,9 @@ export default function Home() {
     setRunning(false);
     setIdentified(null);
     setRedditCount(null);
-    setVideos([]);
+    setVideos(item.meta?.videos || []);
+    setPlaying(new Set());
+    setEditing(false);
     setRaw('```meta\n' + JSON.stringify(item.meta || {}) + '\n```\n\n' + item.body);
     setDoneStages(new Set(['identify', 'reddit', 'youtube', 'searching', 'generate']));
     setCurrentManualId(item.id);
@@ -497,6 +539,8 @@ export default function Home() {
     setIdentified(null);
     setRedditCount(null);
     setVideos([]);
+    setPlaying(new Set());
+    setEditing(false);
     setCurrentManualId(null);
     setCurrentTitle('');
     setChat([]);
@@ -584,7 +628,7 @@ export default function Home() {
         body: JSON.stringify({
           title: currentTitle || (meta && meta.product) || 'Manual',
           body,
-          meta,
+          meta: { ...(meta || {}), videos: videos.slice(0, 4) },
           type: (meta && meta.type) || 'synthesized',
         }),
       });
@@ -600,6 +644,39 @@ export default function Home() {
       flash('Could not save.');
     } finally {
       setBusySave(false);
+    }
+  }
+
+  function startEdit() {
+    if (!body) return;
+    setEditText(body);
+    setEditing(true);
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  async function saveEdit() {
+    const text = editText.trim();
+    if (!currentManualId || text.length < 20 || busyEdit) return;
+    setBusyEdit(true);
+    try {
+      const res = await fetch('/api/manuals', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentManualId, body: text }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        setRaw('```meta\n' + JSON.stringify(meta || {}) + '\n```\n\n' + text);
+        setEditing(false);
+        flash('Manual updated');
+        loadMe();
+      } else {
+        flash(data.error || 'Could not save edits.');
+      }
+    } catch {
+      flash('Could not save edits.');
+    } finally {
+      setBusyEdit(false);
     }
   }
 
@@ -740,6 +817,8 @@ export default function Home() {
     setIdentified(null);
     setRedditCount(null);
     setVideos([]);
+    setPlaying(new Set());
+    setEditing(false);
     setLibHits([]);
     setDoneStages(new Set());
     setActive(image ? 'identify' : 'reddit');
@@ -919,31 +998,36 @@ export default function Home() {
     <div className="wrap">
       <div className="nav no-print">
         <a className="wordmark" href="/">ManualMind</a>
-        {hasAuth && (
-          <div className="topbar">
-            <a className="tb navlink" href="/library">Library</a>
-            {showResult && !running && (
-              <button className="tb" onClick={newManual}>New manual</button>
-            )}
-            {me.signedIn ? (
-              <>
-                <span className={'plan ' + (isPro ? 'pro' : '')}>{isPro ? 'PRO' : 'FREE'}</span>
-                {!isPro && me.limit != null && (
-                  <span className="usage">{(me.usedThisMonth || 0)} / {me.limit} this month</span>
-                )}
-                <span className="email">{me.email}</span>
-                {isPro ? (
-                  <button className="tb" onClick={manageBilling}>Manage</button>
-                ) : (
-                  <button className="tb up" onClick={upgrade}>Upgrade $20/mo</button>
-                )}
-                <button className="tb" onClick={signOut}>Sign out</button>
-              </>
-            ) : (
-              <a className="tb" href="/login">Sign in</a>
-            )}
-          </div>
-        )}
+        <div className="topbar">
+          <button className="tb navlink" onClick={cycleTheme} title="Switch theme (Air / Blueprint / Terminal)">
+            {THEME_LABEL[theme] || 'Air'}
+          </button>
+          {hasAuth && (
+            <>
+              <a className="tb navlink" href="/library">Library</a>
+              {showResult && !running && (
+                <button className="tb" onClick={newManual}>New manual</button>
+              )}
+              {me.signedIn ? (
+                <>
+                  <span className={'plan ' + (isPro ? 'pro' : '')}>{isPro ? 'PRO' : 'FREE'}</span>
+                  {!isPro && me.limit != null && (
+                    <span className="usage">{(me.usedThisMonth || 0)} / {me.limit} this month</span>
+                  )}
+                  <span className="email">{me.email}</span>
+                  {isPro ? (
+                    <button className="tb" onClick={manageBilling}>Manage</button>
+                  ) : (
+                    <button className="tb up" onClick={upgrade}>Upgrade $20/mo</button>
+                  )}
+                  <button className="tb" onClick={signOut}>Sign out</button>
+                </>
+              ) : (
+                <a className="tb" href="/login">Sign in</a>
+              )}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="hero herofade no-print">
@@ -1193,6 +1277,9 @@ export default function Home() {
           )}
           <button onClick={savePdf}>Save as PDF</button>
           <button onClick={makeCard} disabled={busyCard}>{busyCard ? 'Building…' : 'Quick-start card'}</button>
+          {me.signedIn && currentDbManual && !editing && (
+            <button onClick={startEdit} title="Edit this manual's markdown">Edit</button>
+          )}
           <button onClick={copyManual}>{copied ? 'Copied' : 'Copy'}</button>
           <button onClick={shareManual}>Share link</button>
         </div>
@@ -1220,11 +1307,29 @@ export default function Home() {
                   </div>
                 );
               }
+              // Click to play: thumbnail swaps to an embedded player, right inside the manual.
+              if (playing.has(v.id)) {
+                return (
+                  <div key={v.id} className="vid playing">
+                    <iframe
+                      src={'https://www.youtube-nocookie.com/embed/' + v.id + '?autoplay=1&rel=0'}
+                      title={v.title}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                    <span>{v.title}</span>
+                  </div>
+                );
+              }
               return (
-                <a key={v.id} className="vid" href={'https://www.youtube.com/watch?v=' + v.id} target="_blank" rel="noreferrer">
+                <div key={v.id} className="vid" role="button" tabIndex={0} style={{ cursor: 'pointer' }}
+                  onClick={() => setPlaying((p) => new Set(p).add(v.id))}
+                  onKeyDown={(e) => { if (e.key === 'Enter') setPlaying((p) => new Set(p).add(v.id)); }}
+                >
                   <img src={'https://i.ytimg.com/vi/' + v.id + '/mqdefault.jpg'} alt={v.title} loading="lazy" />
+                  <span className="playbtn" aria-hidden="true" />
                   <span>{v.title}</span>
-                </a>
+                </div>
               );
             })}
           </div>
@@ -1248,7 +1353,28 @@ export default function Home() {
         </p>
       )}
 
-      {body && (
+      {editing && (
+        <div className="editor no-print">
+          <h2>Editing “{currentTitle}” — Markdown</h2>
+          <textarea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            spellCheck={false}
+            aria-label="Manual markdown editor"
+          />
+          <div className="editrow">
+            <button className="tb up" disabled={busyEdit || editText.trim().length < 20} onClick={saveEdit}>
+              {busyEdit ? 'Saving…' : 'Save changes'}
+            </button>
+            <button className="tb" onClick={() => setEditing(false)}>Cancel</button>
+            <span className="edithint">
+              {publicSlug ? 'This manual is published — your edits go live for everyone.' : 'Markdown: ## headings, - lists, [links](url)'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {body && !editing && (
         <div className="result">
           <div dangerouslySetInnerHTML={{ __html: marked.parse(body) as string }} />
           {running && <span className="cursor" />}
@@ -1691,6 +1817,16 @@ export default function Home() {
           ManualMind · verify safety-critical steps against official sources
         </div>
       </div>
+
+      {showTop && (
+        <button
+          className="scrolltop no-print"
+          aria-label="Scroll to top"
+          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        >
+          ↑
+        </button>
+      )}
 
       {toast && <div className="toast no-print">{toast}</div>}
     </div>

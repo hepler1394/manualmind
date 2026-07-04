@@ -41,7 +41,16 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${anton.variable} ${caveat.variable}`}>
-      <body>{children}</body>
+      <body>
+        {/* Apply the saved theme before paint so there's no flash of the default theme. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "try{var t=localStorage.getItem('mm_theme');if(t==='blueprint'||t==='terminal'){document.documentElement.setAttribute('data-theme',t)}}catch(e){}",
+          }}
+        />
+        {children}
+      </body>
     </html>
   );
 }

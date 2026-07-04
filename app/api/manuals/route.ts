@@ -48,10 +48,24 @@ export async function PATCH(req: Request) {
   } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Not signed in' }, { status: 401 });
 
-  const space_id = body.space_id === null || body.space_id === '' ? null : body.space_id;
+  // Owners can move a manual between spaces, or edit its title/body.
+  const updates: Record<string, unknown> = {};
+  if ('space_id' in body) {
+    updates.space_id = body.space_id === null || body.space_id === '' ? null : body.space_id;
+  }
+  if (typeof body.body === 'string' && body.body.trim().length >= 20) {
+    updates.body = body.body.slice(0, 200_000);
+  }
+  if (typeof body.title === 'string' && body.title.trim()) {
+    updates.title = body.title.trim().slice(0, 200);
+  }
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
+  }
+
   const { error } = await supabase
     .from('manuals')
-    .update({ space_id })
+    .update(updates)
     .eq('id', id)
     .eq('user_id', user.id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

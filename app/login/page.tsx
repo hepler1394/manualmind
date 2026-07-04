@@ -48,7 +48,7 @@ export default function Login() {
 
       <div className="panel" style={{ maxWidth: 420, margin: '30px auto 0' }}>
         {!hasAuth ? (
-          <p style={{ margin: 0, lineHeight: 1.6, color: 'var(--ink-dim)' }}>
+          <p style={{ margin: 0, lineHeight: 1.6, color: 'var(--dim)' }}>
             Accounts are not enabled on this deployment. Add the Supabase env vars to turn on
             sign-in, cloud library, spaces, and reminders.
           </p>
@@ -61,7 +61,7 @@ export default function Login() {
             <button className="go" style={{ width: '100%', padding: 14 }} onClick={google}>
               Continue with Google
             </button>
-            <div style={{ textAlign: 'center', color: 'var(--ink-dim)', margin: '14px 0', fontSize: 13 }}>
+            <div style={{ textAlign: 'center', color: 'var(--faint)', margin: '14px 0', fontSize: 13 }}>
               or
             </div>
             <form onSubmit={sendLink}>
