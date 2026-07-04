@@ -10,7 +10,7 @@ const DB_ENABLED =
 export const metadata: Metadata = {
   title: 'The manual library',
   description:
-    'Browse completed manuals from the ManualMind library — step-by-step guides sourced from official documentation, Reddit, and YouTube, with every source cited.',
+    'Browse community manuals from the ManualMind library — step-by-step guides sourced from official documentation, community forums, expert sites, and video tutorials, with every source cited.',
   alternates: { canonical: '/library' },
 };
 
@@ -74,9 +74,9 @@ export default async function LibraryPage() {
       </div>
 
       <div className="hero" style={{ marginTop: 56 }}>
-        <h1 style={{ fontSize: 52 }}>The library.</h1>
+        <h1 style={{ fontSize: 'clamp(52px, 9vw, 110px)' }}>The library.</h1>
         <p className="tagline">
-          Every completed manual, published for the next person with the same problem.
+          Community manuals, published for the next person with the same problem.
           {manuals.length > 0 ? ' ' + manuals.length + ' and counting.' : ''}
         </p>
       </div>
@@ -90,12 +90,15 @@ export default async function LibraryPage() {
           </p>
         </div>
       ) : (
-        <div className="libgrid">
+        <div className="postergrid">
           {manuals.map((m) => (
-            <a key={m.slug} className="libcard" href={'/m/' + m.slug}>
-              <span className={'htype' + (m.type === 'official' ? ' official' : '')}>{typeLabel(m.type)}</span>
-              <span className="libtitle">{m.title}</span>
-              {m.published_at && <span className="libdate">{m.published_at.slice(0, 10)}</span>}
+            <a key={m.slug} className="poster" href={'/m/' + m.slug}>
+              <span className="poster-letter" aria-hidden="true">
+                {(m.title || 'M').trim().charAt(0).toUpperCase()}
+              </span>
+              <span className="poster-type">{typeLabel(m.type)} manual</span>
+              <span className="poster-title">{m.title}</span>
+              {m.published_at && <span className="poster-sub">Published {m.published_at.slice(0, 10)}</span>}
             </a>
           ))}
         </div>

@@ -16,13 +16,25 @@ export default function OgImage() {
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: 76,
-          background: '#f5f5f7',
-          color: '#1d1d1f',
+          background: '#000000',
+          color: '#ffffff',
           fontFamily: 'sans-serif',
         }}
       >
-        <div style={{ fontSize: 38, fontWeight: 700, letterSpacing: -1 }}>ManualMind</div>
-        <div style={{ fontSize: 88, fontWeight: 700, lineHeight: 1.05, letterSpacing: -2.5, maxWidth: 1000, display: 'flex' }}>
+        <div style={{ fontSize: 34, fontWeight: 500, letterSpacing: 3, textTransform: 'uppercase' }}>
+          ManualMind
+        </div>
+        <div
+          style={{
+            fontSize: 118,
+            fontWeight: 800,
+            lineHeight: 0.95,
+            letterSpacing: -1,
+            maxWidth: 1050,
+            display: 'flex',
+            textTransform: 'uppercase',
+          }}
+        >
           The manual for anything.
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -30,15 +42,15 @@ export default function OgImage() {
             style={{
               fontSize: 26,
               color: '#ffffff',
-              background: '#0071e3',
+              border: '2px solid #ffffff',
               padding: '12px 28px',
-              borderRadius: 999,
-              fontWeight: 600,
+              borderRadius: 8,
+              fontWeight: 500,
             }}
           >
-            Official first · Reddit-tested · Sources cited
+            Official first · Community-tested · Sources cited
           </div>
-          <div style={{ fontSize: 26, color: '#6e6e73' }}>manualmind</div>
+          <div style={{ fontSize: 26, color: '#426188' }}>manualmind</div>
         </div>
       </div>
     ),

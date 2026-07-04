@@ -39,12 +39,14 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
           flexDirection: 'column',
           justifyContent: 'space-between',
           padding: 76,
-          background: '#f5f5f7',
-          color: '#1d1d1f',
+          background: '#000000',
+          color: '#ffffff',
           fontFamily: 'sans-serif',
         }}
       >
-        <div style={{ fontSize: 38, fontWeight: 700, letterSpacing: -1 }}>ManualMind</div>
+        <div style={{ fontSize: 34, fontWeight: 500, letterSpacing: 3, textTransform: 'uppercase' }}>
+          ManualMind
+        </div>
 
         <div
           style={{
@@ -64,15 +66,15 @@ export default async function OgImage({ params }: { params: { slug: string } }) 
             style={{
               fontSize: 26,
               color: '#ffffff',
-              background: '#0071e3',
+              border: '2px solid #ffffff',
               padding: '12px 28px',
-              borderRadius: 999,
-              fontWeight: 600,
+              borderRadius: 8,
+              fontWeight: 500,
             }}
           >
             {kind}
           </div>
-          <div style={{ fontSize: 26, color: '#6e6e73' }}>Step-by-step · Sources cited</div>
+          <div style={{ fontSize: 26, color: '#426188' }}>Step-by-step · Sources cited</div>
         </div>
       </div>
     ),

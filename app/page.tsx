@@ -32,16 +32,20 @@ type Me = {
 
 const STAGES = [
   { key: 'identify', label: 'Reading upload' },
-  { key: 'reddit', label: 'Scanning Reddit' },
-  { key: 'youtube', label: 'Finding videos' },
-  { key: 'searching', label: 'Searching the web' },
+  { key: 'reddit', label: 'Scanning communities' },
+  { key: 'youtube', label: 'Finding video walkthroughs' },
+  { key: 'searching', label: 'Checking official docs & web' },
   { key: 'generate', label: 'Building manual' },
 ];
 
 type Video = { id: string; title: string };
+type Featured = { slug: string; title: string; type: string; published_at: string | null };
 
 function typeLabel(type?: string | null): string {
-  return type === 'official' ? 'Official' : type === 'community' ? 'Community' : 'AI-built';
+  return type === 'official' ? 'Official'
+    : type === 'community' ? 'Community'
+    : type === 'declined' ? 'Declined'
+    : 'AI-built';
 }
 
 const EXAMPLES = [
@@ -68,7 +72,11 @@ const FAQS: { q: string; a: string }[] = [
   },
   {
     q: 'Where do the answers come from?',
-    a: 'The manufacturer’s official documentation first. Then real Reddit threads from people who actually fixed the problem, the open web, and YouTube tutorials. Every manual ends with its sources, linked.',
+    a: 'The manufacturer’s official documentation first. Then real fixes from people who actually solved the problem — community forums, Reddit, Stack Exchange, repair wikis like iFixit, expert sites, and video tutorials. Every manual ends with its sources, linked.',
+  },
+  {
+    q: 'Why is this better than Google or a chatbot?',
+    a: 'A chatbot gives you an answer that scrolls away. ManualMind gives you a document: a finished, sourced manual you can download as a PDF, save to your profile, print, share as a link, and come back to — with reminders and follow-up chat attached. Search gives you ten tabs; this gives you the one page you actually needed.',
   },
   {
     q: 'Can I upload the manual I already have?',
@@ -87,8 +95,12 @@ const FAQS: { q: string; a: string }[] = [
     a: 'Yes. The site installs as an app on iPhone and Android — open it in your browser and choose "Add to Home Screen."',
   },
   {
-    q: 'How does the YouTube part work?',
-    a: 'For every manual, ManualMind finds real tutorial videos for the same task and shows the best ones under your manual — because some steps are just easier to watch. The AI also references the most relevant video inline.',
+    q: 'How do the video walkthroughs work?',
+    a: 'For every manual, ManualMind finds real tutorial videos for the same task — because some steps are just easier to watch. Free plans get the single best video with each manual; Pro unlocks the full set of walkthroughs, and the AI references the most relevant one inline.',
+  },
+  {
+    q: 'Will it write a manual for anything?',
+    a: 'Almost. It refuses anything dangerous or illegal — weapons, breaking into things you don’t own, defeating security, anything meant to harm someone. Fixing, building, cooking, configuring, and maintaining the things in your life: all fair game.',
   },
   {
     q: 'Can I unpublish a manual?',
@@ -195,6 +207,8 @@ export default function Home() {
   const [copied, setCopied] = useState(false);
   const [busyPublish, setBusyPublish] = useState(false);
   const [buildSeconds, setBuildSeconds] = useState<number | null>(null);
+  const [featured, setFeatured] = useState<Featured[]>([]);
+  const [busySave, setBusySave] = useState(false);
   const searchAbort = useRef<AbortController | null>(null);
   const msgsRef = useRef<HTMLDivElement>(null);
   const [supabase] = useState(() => (hasAuth ? createClient() : null));
@@ -252,6 +266,12 @@ export default function Home() {
       }
     }
     loadMe();
+    if (hasAuth) {
+      fetch('/api/featured')
+        .then((r) => r.json())
+        .then((d) => setFeatured(d.manuals || []))
+        .catch(() => {});
+    }
     if (typeof window !== 'undefined' && window.location.search.includes('upgraded=1')) {
       flash('Welcome to Pro! Unlimited manuals unlocked.');
       window.history.replaceState(null, '', '/');
@@ -546,6 +566,40 @@ export default function Home() {
       flash('Could not build card.');
     } finally {
       setBusyCard(false);
+    }
+  }
+
+  // Save a manual you're viewing (shared link, example, or device-local) to your cloud profile.
+  async function saveToProfile() {
+    if (!body || busySave) return;
+    if (!me.signedIn) {
+      window.location.href = '/login';
+      return;
+    }
+    setBusySave(true);
+    try {
+      const res = await fetch('/api/manuals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: currentTitle || (meta && meta.product) || 'Manual',
+          body,
+          meta,
+          type: (meta && meta.type) || 'synthesized',
+        }),
+      });
+      const data = await res.json();
+      if (data.id) {
+        setCurrentManualId(data.id);
+        flash('Saved to your profile');
+        loadMe();
+      } else {
+        flash(data.error || 'Could not save.');
+      }
+    } catch {
+      flash('Could not save.');
+    } finally {
+      setBusySave(false);
     }
   }
 
@@ -845,6 +899,7 @@ export default function Home() {
   const bannerTitle =
     meta?.type === 'official' ? 'Official manual found'
       : meta?.type === 'community' ? 'Built from community knowledge'
+      : meta?.type === 'declined' ? 'ManualMind won’t build this one'
       : 'Manual synthesized for you';
   const showResult = body && metaClosed;
   const isPro = me.plan === 'pro';
@@ -892,12 +947,12 @@ export default function Home() {
       </div>
 
       <div className="hero herofade no-print">
-        {idle && <div className="herobadge">The answer engine for everything you own.</div>}
-        <h1>The manual for anything.</h1>
+        {idle && <div className="herobadge">The answer engine for everything you own</div>}
+        <h1>The manual for <span className="cursive">anything</span>.</h1>
         <p className="tagline">
-          A product, a problem, an error code — or a photo, or a PDF. ManualMind finds the official
-          manual, the best Reddit fixes, and the right videos. And when no manual exists, it writes
-          you a better one.
+          A product, a problem, an error code — or a photo, or a PDF. ManualMind checks the official
+          docs, the communities that actually fixed it, and the right video walkthroughs — then hands
+          you a finished, downloadable manual. When none exists, it writes you a better one.
         </p>
       </div>
 
@@ -1103,6 +1158,8 @@ export default function Home() {
             </h3>
             {meta.officialManual ? (
               <p>Official source: <a href={meta.officialManual} target="_blank" rel="noreferrer">{meta.officialManual}</a></p>
+            ) : meta?.type === 'declined' ? (
+              <p>ManualMind only builds manuals for safe, legitimate tasks. Details below.</p>
             ) : (
               <p>No official manual was found online, so ManualMind assembled this from the best available sources.</p>
             )}
@@ -1112,6 +1169,11 @@ export default function Home() {
 
       {showResult && !running && (
         <div className="actions no-print">
+          {!currentDbManual && meta?.type !== 'declined' && (
+            <button className="primary" disabled={busySave} onClick={saveToProfile} title="Save this manual to your profile library">
+              {busySave ? 'Saving…' : me.signedIn ? 'Save to profile' : 'Sign in to save'}
+            </button>
+          )}
           {me.signedIn && currentDbManual && (
             publicSlug ? (
               <>
@@ -1138,15 +1200,44 @@ export default function Home() {
 
       {videos.length > 0 && metaClosed && (
         <div className="videos no-print">
-          <h2>Watch it done</h2>
+          <h2>
+            Watch it done
+            {!isPro && hasAuth && videos.length > 1 && <span className="probadge">Pro unlocks all</span>}
+          </h2>
           <div className="vidgrid">
-            {videos.slice(0, 4).map((v) => (
-              <a key={v.id} className="vid" href={'https://www.youtube.com/watch?v=' + v.id} target="_blank" rel="noreferrer">
-                <img src={'https://i.ytimg.com/vi/' + v.id + '/mqdefault.jpg'} alt={v.title} loading="lazy" />
-                <span>{v.title}</span>
-              </a>
-            ))}
+            {videos.slice(0, 4).map((v, i) => {
+              const locked = hasAuth && !isPro && i > 0;
+              if (locked) {
+                return (
+                  <div key={v.id} className="vid locked" role="button" tabIndex={0}
+                    onClick={() => (me.signedIn ? upgrade() : (window.location.href = '/login'))}
+                    onKeyDown={(e) => { if (e.key === 'Enter') (me.signedIn ? upgrade() : (window.location.href = '/login')); }}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <img src={'https://i.ytimg.com/vi/' + v.id + '/mqdefault.jpg'} alt="" loading="lazy" />
+                    <span>{v.title}</span>
+                    <span className="vidlock"><span className="lockbadge">Pro</span></span>
+                  </div>
+                );
+              }
+              return (
+                <a key={v.id} className="vid" href={'https://www.youtube.com/watch?v=' + v.id} target="_blank" rel="noreferrer">
+                  <img src={'https://i.ytimg.com/vi/' + v.id + '/mqdefault.jpg'} alt={v.title} loading="lazy" />
+                  <span>{v.title}</span>
+                </a>
+              );
+            })}
           </div>
+          {hasAuth && !isPro && videos.length > 1 && (
+            <p className="vidnote">
+              Free plans include the best video pick.{' '}
+              {me.signedIn ? (
+                <button onClick={upgrade}>Go Pro to unlock every walkthrough</button>
+              ) : (
+                <a href="/login">Sign in to upgrade</a>
+              )}
+            </p>
+          )}
         </div>
       )}
 
@@ -1307,17 +1398,44 @@ export default function Home() {
         <>
           <div className="trust no-print">
             <span>Official manuals first</span>
-            <span>Real fixes from Reddit</span>
+            <span>Real fixes from real communities</span>
             <span>The right videos</span>
-            <span>Every step sourced</span>
+            <span>Every step sourced &amp; linked</span>
           </div>
+
+          {featured.length > 0 && (
+            <div className="section no-print">
+              <div className="kicker">Community manuals</div>
+              <h2 className="big">Built by people <span className="cursive">like you</span>.</h2>
+              <p className="sub">
+                When someone completes a manual, they can publish it to the community library — so
+                the next person with the same problem gets the answer instantly. Here&apos;s what was
+                built recently.
+              </p>
+              <div className="postergrid">
+                {featured.slice(0, 6).map((f) => (
+                  <a key={f.slug} className="poster" href={'/m/' + f.slug}>
+                    <span className="poster-letter" aria-hidden="true">
+                      {(f.title || 'M').trim().charAt(0).toUpperCase()}
+                    </span>
+                    <span className="poster-type">{typeLabel(f.type)} manual</span>
+                    <span className="poster-title">{f.title}</span>
+                    <span className="poster-sub">{f.published_at ? 'Published ' + f.published_at : 'From the community library'}</span>
+                  </a>
+                ))}
+              </div>
+              <div className="ctasub" style={{ textAlign: 'center', color: 'var(--faint)' }}>
+                <a href="/library">Browse the full community library</a>
+              </div>
+            </div>
+          )}
 
           <div className="section no-print">
             <div className="kicker">Why it exists</div>
             <h2 className="big">You already search like this.</h2>
             <p className="sub">
-              You type your question, then add &ldquo;reddit&rdquo; — because that&apos;s where the real answers
-              are. You open three tabs and a YouTube video to cook one thing. ManualMind does all of
+              You type your question, then add the name of a forum — because that&apos;s where the real
+              answers hide. You open three tabs and a video to cook one thing. ManualMind does all of
               that in one search, and hands you a finished manual.
             </p>
             <div className="howgrid">
@@ -1333,8 +1451,9 @@ export default function Home() {
                 <span className="step">2</span>
                 <h3>It checks every real source</h3>
                 <p>
-                  The manufacturer&apos;s official docs first. Then Reddit threads from people who
-                  actually fixed it. Then the web and YouTube — so fake how-to sites never make the cut.
+                  The manufacturer&apos;s official docs first. Then the communities that actually fixed
+                  it — forums, Stack Exchange, repair wikis, and more — plus the open web and video
+                  tutorials. Fake how-to sites never make the cut.
                 </p>
               </div>
               <div className="howcard">
@@ -1362,7 +1481,7 @@ export default function Home() {
               </div>
               <div className="featcard">
                 <h3>Makers &amp; tinkerers</h3>
-                <p>Flash the firmware, calibrate the printer, install RetroArch, host a local LLM — the stuff where Reddit is the only real documentation.</p>
+                <p>Flash the firmware, calibrate the printer, install RetroArch, host a local LLM — the stuff where forum threads are the only real documentation.</p>
               </div>
               <div className="featcard">
                 <h3>Kitchens &amp; shops</h3>
@@ -1373,26 +1492,40 @@ export default function Home() {
 
           <div className="section no-print">
             <div className="kicker">The difference</div>
-            <h2 className="big">Googling it vs. ManualMind</h2>
-            <div className="compare">
+            <h2 className="big">Google. A chatbot. <span className="cursive">Or a manual.</span></h2>
+            <p className="sub">
+              Search gives you tabs. A chatbot gives you an answer that scrolls away. ManualMind
+              gives you a document — sourced, saved, and yours.
+            </p>
+            <div className="compare three">
               <div className="comparecol">
                 <h3>Googling it</h3>
                 <ul>
                   <li>Ten tabs, three of them fake how-to sites</li>
                   <li>An SEO article that never answers the question</li>
                   <li>A 40-minute video for a 2-minute fix</li>
-                  <li>The answer buried in a Reddit comment from 2019</li>
+                  <li>The answer buried in a forum comment from 2019</li>
                   <li>Start over next time it breaks</li>
+                </ul>
+              </div>
+              <div className="comparecol">
+                <h3>Asking a chatbot</h3>
+                <ul>
+                  <li>A decent answer that vanishes up the chat</li>
+                  <li>No sources — you just have to trust it</li>
+                  <li>Nothing to download, print, or tape to the machine</li>
+                  <li>No videos, no reminders, no library</li>
+                  <li>Ask again next time, get a different answer</li>
                 </ul>
               </div>
               <div className="comparecol mm">
                 <h3>ManualMind</h3>
                 <ul>
-                  <li>One search, official docs checked first</li>
+                  <li>One search — official docs checked first</li>
                   <li>A finished, step-by-step manual in about a minute</li>
-                  <li>The best Reddit fixes and videos, already filtered</li>
-                  <li>Every claim linked to its source</li>
-                  <li>Saved forever, with reminders and follow-up chat</li>
+                  <li>Every claim hyperlinked to its source</li>
+                  <li>Download as PDF, print it, save it to your profile</li>
+                  <li>Yours forever — with reminders and follow-up chat</li>
                 </ul>
               </div>
             </div>
@@ -1400,7 +1533,7 @@ export default function Home() {
 
           <div className="section no-print">
             <div className="kicker">The library</div>
-            <h2 className="big">Every completed manual makes the next search better.</h2>
+            <h2 className="big">Every manual makes the next search <span className="cursive">better</span>.</h2>
             <p className="sub">
               When you complete a manual, it joins a public, searchable library — so the next person
               with your exact problem gets the answer instantly. Google finds it. You built it.
@@ -1443,9 +1576,10 @@ export default function Home() {
                 <ul>
                   <li>3 manuals a day, no account needed</li>
                   <li>5 manuals a month with a free account</li>
-                  <li>Cloud library and spaces</li>
+                  <li>Cloud library, profile saves, and spaces</li>
                   <li>Follow-up chat on every manual</li>
                   <li>Maintenance reminders</li>
+                  <li>The best video pick with each manual</li>
                   <li>Save as PDF, share, and publish</li>
                 </ul>
                 <button onClick={() => { window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Get started</button>
@@ -1456,6 +1590,7 @@ export default function Home() {
                 <ul>
                   <li>Everything in Free</li>
                   <li>Unlimited manuals</li>
+                  <li>Every video walkthrough, unlocked</li>
                   <li>Quick-start cards — any manual on one printable page</li>
                   <li>Priority pipeline</li>
                   <li>Cancel anytime</li>

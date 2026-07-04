@@ -1,6 +1,11 @@
 import type { Metadata, Viewport } from 'next';
+import { Inter, Anton, Caveat } from 'next/font/google';
 import { siteUrl } from '@/lib/site';
 import './globals.css';
+
+const inter = Inter({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-inter', display: 'swap' });
+const anton = Anton({ subsets: ['latin'], weight: '400', variable: '--font-anton', display: 'swap' });
+const caveat = Caveat({ subsets: ['latin'], weight: ['400', '500'], variable: '--font-caveat', display: 'swap' });
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl()),
@@ -9,7 +14,7 @@ export const metadata: Metadata = {
     template: '%s — ManualMind',
   },
   description:
-    'Find the official manual for anything — or get a better one built live from Reddit, the web, and YouTube. Type it, snap a photo, or upload a PDF.',
+    'Find the official manual for anything — or get a better one built live from official docs, community forums, expert sites, and video tutorials. Type it, snap a photo, or upload a PDF.',
   manifest: '/manifest.webmanifest',
   applicationName: 'ManualMind',
   appleWebApp: { capable: true, title: 'ManualMind', statusBarStyle: 'black-translucent' },
@@ -21,13 +26,13 @@ export const metadata: Metadata = {
   authors: [{ name: 'ManualMind' }],
   creator: 'ManualMind',
   formatDetection: { telephone: false },
-  // Site ships its own deliberate light design; tells Dark Reader not to repaint it.
+  // Site ships its own deliberate dark design; tells Dark Reader not to repaint it.
   other: { 'darkreader-lock': 'true' },
 };
 
 export const viewport: Viewport = {
-  themeColor: '#f5f5f7',
-  colorScheme: 'only light',
+  themeColor: '#000000',
+  colorScheme: 'dark',
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
@@ -35,7 +40,7 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${inter.variable} ${anton.variable} ${caveat.variable}`}>
       <body>{children}</body>
     </html>
   );

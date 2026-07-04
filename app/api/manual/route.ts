@@ -280,7 +280,9 @@ export async function POST(req: Request) {
             : '(no Reddit threads found)';
 
         const system =
-          'You are ManualMind, an expert technical-manual engine. Produce the single most useful manual for the item the user needs help with.';
+          'You are ManualMind, an expert technical-manual engine. Your one job is producing the single most useful manual for the item or task the user needs help with. You are a manual specialist, not a general chatbot.\n\n' +
+          'SAFETY — non-negotiable. Refuse to produce a manual when the request is for: weapons, explosives, or dangerous chemical/biological agents; illegal drugs or drug synthesis; breaking into, unlocking, or tracking property, accounts, or devices the user does not own; defeating security systems, anti-theft measures, or surveillance of other people; anything intended to harm people or animals; or bypassing safety interlocks on equipment in ways that endanger others. When refusing, output the meta block with {"type":"declined"} and then 2-3 sentences politely explaining that ManualMind only builds manuals for safe, legitimate tasks — and, where one exists, suggest the closest legitimate alternative (e.g. a locksmith, the manufacturer\'s account-recovery process). Jailbreaking or repairing a device the USER owns, standard repairs, and safety-conscious DIY are all fine.\n\n' +
+          'For legitimate but hazardous work (gas, mains electrical, structural, automotive brakes), include a prominent Safety section and say clearly when a licensed professional is required.';
 
         const youtubeContext =
           videos.length > 0
@@ -291,15 +293,16 @@ export async function POST(req: Request) {
 
         const userPrompt =
           'The user needs a manual or guide for: "' + subject + '".\n\n' +
-          'Reddit community discussions found (real-world tips, gotchas, fixes — cite the most useful):\n' +
+          'Community discussions found so far (real-world tips, gotchas, fixes — cite the most useful):\n' +
           redditContext +
-          '\n\nYouTube tutorials found:\n' +
+          '\n\nVideo tutorials found:\n' +
           youtubeContext +
           '\n\nInstructions:\n' +
           '1. Use web_search to find the OFFICIAL manufacturer manual, user guide, datasheet, or PDF for this item if one plausibly exists. Search smartly (model number + "manual" / "user guide" / "pdf").\n' +
-          '2. Begin your reply with ONE fenced code block tagged meta containing minified JSON: {"product":"<best name>","officialManual":"<direct URL or empty>","type":"official|community|synthesized","confidence":"high|medium|low"}.\n' +
-          '3. After the meta block, write a clear Markdown manual: a one-line summary, then sections like Overview, What You Need, Step-by-Step, Tips & Common Mistakes, Troubleshooting, and Safety if relevant. Be specific and practical. Where a step is much easier to follow on video, reference the most relevant YouTube tutorial inline as a markdown link.\n' +
-          '4. End with a "## Sources" section listing every official link, Reddit thread, and YouTube video you used, as markdown links.\n\n' +
+          '2. Use web_search to broaden beyond the discussions above: specialist forums, Stack Exchange, iFixit and repair wikis, manufacturer support pages, and reputable expert sites. Pull in the best real-world fixes wherever they live.\n' +
+          '3. Begin your reply with ONE fenced code block tagged meta containing minified JSON: {"product":"<best name>","officialManual":"<direct URL or empty>","type":"official|community|synthesized|declined","confidence":"high|medium|low"}.\n' +
+          '4. After the meta block, write a clear Markdown manual: a one-line summary, then sections like Overview, What You Need, Step-by-Step, Tips & Common Mistakes, Troubleshooting, and Safety if relevant. Be specific and practical. Hyperlink liberally: whenever a step relies on a specific source, part, tool, or download, link it inline as a markdown link. Where a step is much easier to follow on video, reference the most relevant video tutorial inline as a markdown link.\n' +
+          '5. End with a "## Sources" section listing every official link, community thread, and video you used, as markdown links.\n\n' +
           (isPdf
             ? 'IMPORTANT: The user attached a PDF document (shown above the instructions). Base the manual primarily on that document — treat it as the authoritative source — and use Reddit/web/YouTube only to fill gaps with real-world tips.\n\n'
             : '') +
@@ -323,7 +326,7 @@ export async function POST(req: Request) {
           model: MODEL,
           max_tokens: 4096,
           system,
-          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 } as any],
+          tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 } as any],
           messages: [{ role: 'user', content: userContent }],
         });
 
@@ -350,7 +353,7 @@ export async function POST(req: Request) {
         if (DB_ENABLED && admin) {
           try {
             await admin.from('usage').insert({ user_id: user ? user.id : null, ip, kind: 'manual' });
-            if (user && full) {
+            if (user && full && !full.includes('"type":"declined"')) {
               const { meta, body: manualBody } = splitMeta(full);
               const { data: inserted } = await admin
                 .from('manuals')
