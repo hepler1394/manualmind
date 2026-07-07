@@ -26,6 +26,21 @@ export const metadata: Metadata = {
   authors: [{ name: 'ManualMind' }],
   creator: 'ManualMind',
   formatDetection: { telephone: false },
+  openGraph: {
+    type: 'website',
+    siteName: 'ManualMind',
+    locale: 'en_US',
+    title: 'ManualMind — the manual for anything',
+    description:
+      'Find the official manual for anything — or get a better one built live from official docs, community forums, expert sites, and video tutorials.',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'ManualMind — the manual for anything',
+    description:
+      'Find the official manual for anything — or get a better one built live from official docs and community knowledge.',
+  },
+  robots: { index: true, follow: true },
   // Site ships its own deliberate dark design; tells Dark Reader not to repaint it.
   other: { 'darkreader-lock': 'true' },
 };
