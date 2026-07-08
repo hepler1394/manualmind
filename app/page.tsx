@@ -1078,7 +1078,6 @@ export default function Home() {
       </div>
 
       <div className="hero herofade no-print">
-        {idle && <div className="herobadge">The answer engine for everything you own</div>}
         <h1>The manual for <span className="cursive">anything</span>.</h1>
         <p className="tagline">
           A product, a problem, an error code — or a photo, or a PDF. ManualMind checks the official
@@ -1628,8 +1627,7 @@ export default function Home() {
 
           {featured.length > 0 && (
             <div className="section no-print">
-              <div className="kicker">Community manuals</div>
-              <h2 className="big">Built by people <span className="cursive">like you</span>.</h2>
+              <h2 className="big">Built by people like you.</h2>
               <p className="sub">
                 When someone completes a manual, they can publish it to the community library — so
                 the next person with the same problem gets the answer instantly. Here&apos;s what was
@@ -1654,7 +1652,6 @@ export default function Home() {
           )}
 
           <div className="section no-print">
-            <div className="kicker">Why it exists</div>
             <h2 className="big">You already search like this.</h2>
             <p className="sub">
               You type your question, then add the name of a forum — because that&apos;s where the real
@@ -1690,32 +1687,30 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="section no-print">
-            <div className="kicker">Who it&apos;s for</div>
+          <div className="section leftsec no-print">
             <h2 className="big">One tool, every &ldquo;how do I…&rdquo;</h2>
-            <div className="featgrid" style={{ gridTemplateColumns: 'repeat(2, 1fr)' }}>
-              <div className="featcard">
-                <h3>Homeowners</h3>
-                <p>The furnace filter, the water heater&apos;s pilot light, the breaker that keeps tripping, the sprinkler timer nobody remembers programming.</p>
+            <dl className="audience">
+              <div className="aud-row">
+                <dt>Homeowners</dt>
+                <dd>The furnace filter, the water heater&apos;s pilot light, the breaker that keeps tripping, the sprinkler timer nobody remembers programming.</dd>
               </div>
-              <div className="featcard">
-                <h3>Renters</h3>
-                <p>Appliances you didn&apos;t choose and can&apos;t replace. Get the manual for the mystery thermostat before you touch it.</p>
+              <div className="aud-row">
+                <dt>Renters</dt>
+                <dd>Appliances you didn&apos;t choose and can&apos;t replace. Get the manual for the mystery thermostat before you touch it.</dd>
               </div>
-              <div className="featcard">
-                <h3>Makers &amp; tinkerers</h3>
-                <p>Flash the firmware, calibrate the printer, install RetroArch, host a local LLM — the stuff where forum threads are the only real documentation.</p>
+              <div className="aud-row">
+                <dt>Makers &amp; tinkerers</dt>
+                <dd>Flash the firmware, calibrate the printer, install RetroArch, host a local LLM — the stuff where forum threads are the only real documentation.</dd>
               </div>
-              <div className="featcard">
-                <h3>Kitchens &amp; shops</h3>
-                <p>Every machine on the line with its own quick-start card taped to it, and maintenance reminders that actually fire.</p>
+              <div className="aud-row">
+                <dt>Kitchens &amp; shops</dt>
+                <dd>Every machine on the line with its own quick-start card taped to it, and maintenance reminders that actually fire.</dd>
               </div>
-            </div>
+            </dl>
           </div>
 
           <div className="section no-print">
-            <div className="kicker">The difference</div>
-            <h2 className="big">Google. A chatbot. <span className="cursive">Or a manual.</span></h2>
+            <h2 className="big">Google. A chatbot. Or a manual.</h2>
             <p className="sub">
               Search gives you tabs. A chatbot gives you an answer that scrolls away. ManualMind
               gives you a document — sourced, saved, and yours.
@@ -1755,34 +1750,33 @@ export default function Home() {
           </div>
 
           <div className="section no-print">
-            <div className="kicker">The library</div>
-            <h2 className="big">Every manual makes the next search <span className="cursive">better</span>.</h2>
+            <h2 className="big">Every manual makes the next search better.</h2>
             <p className="sub">
               When you complete a manual, it joins a public, searchable library — so the next person
               with your exact problem gets the answer instantly. Google finds it. You built it.
             </p>
-            <div className="featgrid">
-              <div className="featcard">
+            <div className="featindex">
+              <div className="feat">
                 <h3>Library &amp; Spaces</h3>
                 <p>Every manual saved and grouped by place — My Home, The Shop, Unit 4B.</p>
               </div>
-              <div className="featcard">
+              <div className="feat">
                 <h3>Ask follow-ups</h3>
                 <p>Stuck on step 3? Every manual has its own chat that knows the context.</p>
               </div>
-              <div className="featcard">
+              <div className="feat">
                 <h3>Maintenance reminders</h3>
                 <p>Filter changes, oil, batteries — on schedule, with suggested intervals.</p>
               </div>
-              <div className="featcard">
+              <div className="feat">
                 <h3>Quick-start cards</h3>
                 <p>Any manual boiled down to one printable page. Tape it to the machine.</p>
               </div>
-              <div className="featcard">
+              <div className="feat">
                 <h3>PDF &amp; share</h3>
                 <p>Save as PDF or send a link. Your fix becomes someone else&apos;s fix.</p>
               </div>
-              <div className="featcard">
+              <div className="feat">
                 <h3>Complete &amp; publish</h3>
                 <p>One click turns your manual into a public page anyone can find.</p>
               </div>
@@ -1790,7 +1784,6 @@ export default function Home() {
           </div>
 
           <div className="section no-print">
-            <div className="kicker">Pricing</div>
             <h2 className="big">Free to start. Simple to grow.</h2>
             <div className="pricegrid">
               <div className="pricecard free">
@@ -1825,7 +1818,6 @@ export default function Home() {
           </div>
 
           <div className="section no-print">
-            <div className="kicker">Questions</div>
             <h2 className="big">Everything people ask.</h2>
             <div className="faq">
               {FAQS.map((f) => (
