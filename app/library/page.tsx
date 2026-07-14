@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import { createClient } from '@supabase/supabase-js';
 import { siteUrl } from '@/lib/site';
+import LibraryExplorer from './library-explorer';
 
 export const revalidate = 300;
 
@@ -42,10 +43,6 @@ async function getManuals(): Promise<Item[]> {
   } catch {
     return [];
   }
-}
-
-function typeLabel(type?: string | null): string {
-  return type === 'official' ? 'Official' : type === 'community' ? 'Community' : 'AI-built';
 }
 
 export default async function LibraryPage() {
@@ -91,18 +88,7 @@ export default async function LibraryPage() {
           </p>
         </div>
       ) : (
-        <div className="postergrid">
-          {manuals.map((m) => (
-            <a key={m.slug} className="poster" href={'/m/' + m.slug}>
-              <span className="poster-letter" aria-hidden="true">
-                {(m.title || 'M').trim().charAt(0).toUpperCase()}
-              </span>
-              <span className="poster-type">{m.verified ? '✓ ' : ''}{typeLabel(m.type)} manual</span>
-              <span className="poster-title">{m.title}</span>
-              {m.published_at && <span className="poster-sub">Published {m.published_at.slice(0, 10)}</span>}
-            </a>
-          ))}
-        </div>
+        <LibraryExplorer manuals={manuals} />
       )}
 
       <div className="pub-cta" style={{ marginTop: 64 }}>
