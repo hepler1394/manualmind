@@ -78,7 +78,7 @@ const PLACEHOLDERS = [
 const FAQS: { q: string; a: string }[] = [
   {
     q: 'Is ManualMind free?',
-    a: 'Yes. You get 3 manuals a day with no account, and 5 a month with a free account — plus the library, spaces, chat, and reminders. Pro is $20/month for unlimited manuals and quick-start cards.',
+    a: 'Yes. You get 3 manuals a day with no account, and 5 a month with a free account — plus the library, spaces, chat, and reminders. Pro is $20/month and built for people managing lots of stuff — landlords, hosts, shops, makers: unlimited manuals, your own sources, every video, and quick-start cards.',
   },
   {
     q: 'Where do the answers come from?',
@@ -992,6 +992,40 @@ export default function Home() {
     }
   }
 
+  const [busyApply, setBusyApply] = useState(false);
+  // After a chat answer solves something, fold it back into the manual itself.
+  async function applyChatToManual() {
+    if (!currentManualId || busyApply || chat.length < 2) return;
+    const lastAssistant = [...chat].reverse().find((m) => m.role === 'assistant' && m.content);
+    const lastUser = [...chat].reverse().find((m) => m.role === 'user' && m.content);
+    if (!lastAssistant || !lastUser) return;
+    setBusyApply(true);
+    flash('Writing it into the manual…');
+    try {
+      const res = await fetch('/api/chat/apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: currentManualId, question: lastUser.content, answer: lastAssistant.content }),
+      });
+      const data = await res.json();
+      if (data.body) {
+        if (data.changed) {
+          setRaw('```meta\n' + JSON.stringify(meta || {}) + '\n```\n\n' + data.body);
+          flash('Manual updated — the fix is now part of it');
+          loadMe();
+        } else {
+          flash('Nothing new to add — the manual already covers it.');
+        }
+      } else {
+        flash(data.error || 'Could not update the manual.');
+      }
+    } catch {
+      flash('Could not update the manual.');
+    } finally {
+      setBusyApply(false);
+    }
+  }
+
   async function sendChat() {
     const q = chatInput.trim();
     if (!q || chatRunning) return;
@@ -1573,6 +1607,16 @@ export default function Home() {
               ))}
             </div>
           )}
+          {me.signedIn && currentDbManual && !chatRunning && chat.length >= 2 &&
+            chat[chat.length - 1]?.role === 'assistant' && !!chat[chat.length - 1]?.content && (
+            <div className="applyrow">
+              <button className="tb" disabled={busyApply} onClick={applyChatToManual}
+                title="Merge what this chat figured out into the manual (usually Troubleshooting)">
+                {busyApply ? 'Writing it in…' : '+ Add this fix to the manual'}
+              </button>
+              <span className="applyhint">Solved something? Make it part of the manual forever.</span>
+            </div>
+          )}
           <div className="chatform">
             <input
               type="text"
@@ -1843,12 +1887,17 @@ export default function Home() {
               <div className="pricecard pro">
                 <div className="tier">Pro</div>
                 <div className="price">$20<span> /month</span></div>
+                <p className="prowho">
+                  Built for people with stuff: landlords, Airbnb hosts, shop and kitchen owners,
+                  makers, resellers — anyone maintaining more than a handful of machines.
+                </p>
                 <ul>
                   <li>Everything in Free</li>
-                  <li>Unlimited manuals</li>
+                  <li>Unlimited manuals — one for every unit, machine, and appliance</li>
                   <li>Every video walkthrough, unlocked</li>
                   <li>Pour in your own sources — links your manual is built from</li>
-                  <li>Quick-start cards — any manual on one printable page</li>
+                  <li>Chat fixes write themselves into the manual</li>
+                  <li>Quick-start cards — tape one to every machine</li>
                   <li>Priority pipeline</li>
                   <li>Cancel anytime</li>
                 </ul>
