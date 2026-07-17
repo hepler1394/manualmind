@@ -4,7 +4,8 @@ import { NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const MODEL = 'claude-sonnet-5';
+// Summarizing an existing manual onto one page is Haiku-grade work.
+const MODEL = 'claude-haiku-4-5-20251001';
 
 export async function POST(req: Request) {
   const apiKey = process.env.ANTHROPIC_API_KEY;

@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 export const runtime = 'nodejs';
 export const maxDuration = 30;
 
-const MODEL = 'claude-sonnet-5';
+// A pass/fail content check is Haiku-grade work.
+const MODEL = 'claude-haiku-4-5-20251001';
 
 // Owner asks for their edited manual to be re-verified. An AI reviewer checks the
 // manual still cites sources, contains no unsafe instructions, and reads like a

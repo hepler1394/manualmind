@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/server';
 export const runtime = 'nodejs';
 export const maxDuration = 60;
 
-const MODEL = 'claude-sonnet-5';
+// High-frequency, low-complexity: Haiku keeps follow-up chat snappy and ~10x cheaper.
+const MODEL = 'claude-haiku-4-5-20251001';
 const DB_ENABLED =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&
   !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
