@@ -97,7 +97,7 @@ body {
 a { color: var(--signal); }
 
 /* ---------- nav ---------- */
-.nav { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; gap: 12px; height: 72px; padding: 0 22px; margin: 0 -22px; background: rgba(0, 0, 0, 0.78); backdrop-filter: saturate(160%) blur(18px); -webkit-backdrop-filter: saturate(160%) blur(18px); border-bottom: 1px solid var(--hairline-soft); }
+.nav { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; min-height: 72px; padding: 10px 22px; margin: 0 -22px; background: rgba(0, 0, 0, 0.78); backdrop-filter: saturate(160%) blur(18px); -webkit-backdrop-filter: saturate(160%) blur(18px); border-bottom: 1px solid var(--hairline-soft); }
 .wordmark { font-weight: 500; font-size: 17px; letter-spacing: 0.02em; color: var(--whiteout); text-decoration: none; text-transform: uppercase; }
 .topbar { display: flex; align-items: center; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
 .plan { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--dim); border: 1px solid var(--hairline); border-radius: var(--radius-btn); padding: 3px 7px; background: transparent; }
@@ -367,8 +367,9 @@ button.go:disabled { opacity: 0.4; cursor: default; }
 .srcrow.locked { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--faint); flex-wrap: wrap; }
 .srcrow .probadge { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink); background: var(--haze); border-radius: var(--radius-input); padding: 2px 6px; }
 .srclink { background: none; border: none; padding: 0 2px 1px; color: var(--signal); border-bottom: 2px solid var(--signal); font: inherit; font-weight: 500; cursor: pointer; text-decoration: none; }
-.srcadd { display: flex; gap: 8px; }
-.srcadd input { font-size: 14px; padding: 10px 12px; }
+.srcadd { display: flex; gap: 8px; flex-wrap: wrap; }
+.srcadd input { font-size: 14px; padding: 10px 12px; min-width: 0; }
+.srcadd .tb { flex: none; }
 .srcchips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
 .srcchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--whiteout); border: 1px solid var(--hairline); border-radius: var(--radius-pill); padding: 5px 6px 5px 12px; }
 .srcchip .srcurl { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -548,6 +549,15 @@ button.go:disabled { opacity: 0.4; cursor: default; }
   .section { margin-top: 88px; }
   .poster { min-height: 200px; }
   .poster-letter { font-size: 160px; }
+  /* iOS zooms into any focused control under 16px — force 16px on touch layouts. */
+  input[type=text], input[type=email], select, textarea,
+  .rem-add input, .srcadd input, .rem-add select, .spacesel, .hspace { font-size: 16px !important; }
+  .clearq { width: 32px; height: 32px; }
+  /* Wide markdown tables scroll inside the manual instead of stretching the page. */
+  .result table { display: block; overflow-x: auto; }
+  /* Keep the toast clear of the scroll-to-top button. */
+  .toast { bottom: 80px; }
+  .scrolltop { right: 16px; bottom: 16px; }
 }
 
 /* ---------- print: manuals print as clean paper documents ---------- */

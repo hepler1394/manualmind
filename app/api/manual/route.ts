@@ -294,6 +294,14 @@ export async function POST(req: Request) {
           send({ stage: 'identified', product: subject });
         }
 
+        // Feed the auto-library: every real search becomes a signal for what
+        // manual the background pipeline should build next.
+        if (DB_ENABLED && admin && subject) {
+          try {
+            await admin.from('search_log').insert({ query: subject.slice(0, 200), ip });
+          } catch {}
+        }
+
         // Pro-only: pull in the user's own source links before anything else.
         let userSourcesContext = '';
         if (requestedSources.length > 0 && userIsPro) {
