@@ -220,6 +220,8 @@ export default function Home() {
   const [featured, setFeatured] = useState<Featured[]>([]);
   const [busySave, setBusySave] = useState(false);
   const [theme, setTheme] = useState<string>('air');
+  const [heroWord, setHeroWord] = useState('');
+  const [heroDone, setHeroDone] = useState(false);
   const [showTop, setShowTop] = useState(false);
   const [playing, setPlaying] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState(false);
@@ -246,6 +248,39 @@ export default function Home() {
   useEffect(() => {
     const t = setInterval(() => setPhIdx((i) => (i + 1) % PLACEHOLDERS.length), 3500);
     return () => clearInterval(t);
+  }, []);
+
+  // Hero: type through example words once per visit, land on "anything", leave the period blinking.
+  useEffect(() => {
+    let alive = true;
+    const words = ['cars', 'homes', 'phones', 'applications', 'anything'];
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setHeroWord('anything');
+      setHeroDone(true);
+      return;
+    }
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    (async () => {
+      await sleep(350);
+      for (let w = 0; w < words.length; w++) {
+        const word = words[w];
+        for (let i = 1; i <= word.length; i++) {
+          if (!alive) return;
+          setHeroWord(word.slice(0, i));
+          await sleep(70);
+        }
+        if (w === words.length - 1) break; // "anything" stays
+        await sleep(700);
+        for (let i = word.length - 1; i >= 0; i--) {
+          if (!alive) return;
+          setHeroWord(word.slice(0, i));
+          await sleep(38);
+        }
+        await sleep(140);
+      }
+      if (alive) setHeroDone(true);
+    })();
+    return () => { alive = false; };
   }, []);
 
   // Theme: restore from storage; cycleTheme writes the attribute + storage.
@@ -1078,7 +1113,12 @@ export default function Home() {
       </div>
 
       <div className="hero herofade no-print">
-        <h1>The manual for <span className="cursive">anything</span>.</h1>
+        <h1 aria-label="The manual for anything.">
+          <span aria-hidden="true">
+            The manual for <span className="cursive">{heroWord}</span>
+            <span className={'herodot' + (heroDone ? ' blink' : '')}>.</span>
+          </span>
+        </h1>
         <p className="tagline">
           A product, a problem, an error code — or a photo, or a PDF. ManualMind checks the official
           docs, the communities that actually fixed it, and the right video walkthroughs — then hands
