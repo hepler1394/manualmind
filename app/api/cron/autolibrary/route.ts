@@ -163,5 +163,11 @@ export async function GET(req: Request) {
   });
   if (error) return NextResponse.json({ ok: false, reason: error.message });
 
+  // Consume the demand that drove this build — wording variants of the same topic
+  // slip past title matching, so the built query must leave the queue entirely.
+  try {
+    await admin.from('search_log').delete().ilike('query', subject);
+  } catch {}
+
   return NextResponse.json({ ok: true, built: 1, subject, slug, searches: candidate.n });
 }
