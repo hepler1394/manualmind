@@ -136,7 +136,19 @@ export async function GET(req: Request) {
     freshTitles.some((t) =>
       t.includes(subjectL.slice(0, 40)) || subjectL.includes(t.slice(0, 40)) ||
       t.includes(titleL.slice(0, 40)) || titleL.includes(t.slice(0, 40)));
-  if (covered) return NextResponse.json({ ok: true, built: 0, reason: 'covered during generation', subject });
+  if (covered) {
+    return NextResponse.json({
+      ok: true,
+      built: 0,
+      reason: 'covered during generation',
+      subject,
+      debug: {
+        publishedAtStart: (published || []).length,
+        slugsAtStart: [...haveSlugs].slice(0, 10),
+        rankedTop: ranked.slice(0, 3).map((r) => r.q),
+      },
+    });
+  }
   if (freshSlugs.has(slug)) slug = slug + '-' + Math.random().toString(36).slice(2, 6);
   const { error } = await admin.from('manuals').insert({
     user_id: owner.id,
