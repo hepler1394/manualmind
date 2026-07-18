@@ -116,10 +116,25 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: true, built: 0, reason: 'declined or too thin', subject });
   }
 
-  // 5) Publish. Collision-safe slug.
+  // 5) Publish. Re-check coverage with FRESH data right before inserting —
+  // generation takes a minute, and a concurrent run may have covered the topic meanwhile.
   const title = (meta && meta.product) || subject;
   let slug = slugify(title);
-  if (haveSlugs.has(slug)) slug = slug + '-' + Math.random().toString(36).slice(2, 6);
+  const { data: freshRows } = await admin
+    .from('manuals')
+    .select('title, public_slug')
+    .not('public_slug', 'is', null)
+    .limit(500);
+  const freshTitles = (freshRows || []).map((m: any) => (m.title || '').toLowerCase());
+  const freshSlugs = new Set((freshRows || []).map((m: any) => m.public_slug));
+  const subjectL = subject.toLowerCase();
+  const titleL = title.toLowerCase();
+  const covered = freshSlugs.has(slug) ||
+    freshTitles.some((t) =>
+      t.includes(subjectL.slice(0, 40)) || subjectL.includes(t.slice(0, 40)) ||
+      t.includes(titleL.slice(0, 40)) || titleL.includes(t.slice(0, 40)));
+  if (covered) return NextResponse.json({ ok: true, built: 0, reason: 'covered during generation', subject });
+  if (freshSlugs.has(slug)) slug = slug + '-' + Math.random().toString(36).slice(2, 6);
   const { error } = await admin.from('manuals').insert({
     user_id: owner.id,
     title,
