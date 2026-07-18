@@ -3,6 +3,8 @@ import { adminClient } from '@/lib/supabase/admin';
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+// Must never be statically cached — this route sends real emails on real schedules.
+export const dynamic = 'force-dynamic';
 
 const DB_ENABLED =
   !!process.env.NEXT_PUBLIC_SUPABASE_URL &&

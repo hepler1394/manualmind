@@ -12,6 +12,9 @@ import {
 
 export const runtime = 'nodejs';
 export const maxDuration = 60;
+// GET route handlers are statically cached at build time unless forced dynamic —
+// without this, the route runs during `next build` and serves that frozen result forever.
+export const dynamic = 'force-dynamic';
 
 const MODEL = 'claude-sonnet-5';
 
